@@ -8,6 +8,7 @@ import { authRouter } from './authRoutes';
 import { profileRouter } from './profileRoutes';
 import { linkRouter } from './linkRoutes';
 import adminRouter from './adminRoutes';
+import designsRouter from './designs.routes';
 
 export const apiRouter = Router();
 
@@ -22,6 +23,9 @@ apiRouter.use('/links', linkRouter);
 
 /** Admin management endpoints */
 apiRouter.use('/admin', adminRouter);
+
+/** Design saving endpoints */
+apiRouter.use('/designs', designsRouter);
 
 /** API version info */
 apiRouter.get('/', (_req, res) => {

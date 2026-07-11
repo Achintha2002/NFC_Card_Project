@@ -39,6 +39,12 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum DesignStatus {
+  TEMPORARY
+  CART
+  ORDERED
+}
+
 enum NfcCardStatus {
   UNASSIGNED
   ASSIGNED
@@ -284,6 +290,39 @@ model Order {
   @@map("orders")
 }
 
+/// A customized card design created in the studio
+model CardDesign {
+  id            String       @id @default(cuid())
+  status        DesignStatus @default(TEMPORARY)
+  
+  // Configuration
+  productName   String
+  basePrice     Float
+  customBgPrice Float
+  totalPrice    Float
+  foilColor     String
+  foilLabel     String
+  accentColor   String
+  bgColor       String
+  bgImage       String?
+  displayName   String
+  designation   String
+  email         String
+  phone         String
+  website       String
+  fontStyle     String
+
+  // Relations
+  orderItems    OrderItem[]
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime? // Used for 3-day cart cleanup
+  updatedAt     DateTime  @updatedAt
+
+  @@map("card_designs")
+}
+
 /// Individual item line within an Order.
 model OrderItem {
   id                  String  @id @default(cuid())
@@ -292,10 +331,12 @@ model OrderItem {
   customEngravingText String? // Optional laser engraving on metal/wood cards
 
   // Relations
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  orderId      String
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  cardDesignId String?
+  cardDesign   CardDesign? @relation(fields: [cardDesignId], references: [id], onDelete: SetNull)
 
   @@map("order_items")
 }

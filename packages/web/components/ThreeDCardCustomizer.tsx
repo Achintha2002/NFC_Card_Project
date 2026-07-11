@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Settings2, User } from "lucide-react";
-import { motion } from "framer-motion";
-import { useSearchParams } from "next/navigation";
+import { Settings2, User, CheckCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useSearchParams, useRouter } from "next/navigation";
 
 // --- OPTIONS ---
 const FOIL_COLORS = [
@@ -205,6 +205,7 @@ export function PremiumHeroGraphic() {
 
 export default function ThreeDCardCustomizer() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const productName = searchParams.get("product") || "Executive Metal";
   const isPVC = productName.trim().toLowerCase().includes("pvc");
 
@@ -217,12 +218,14 @@ export default function ThreeDCardCustomizer() {
   const [foil, setFoil] = useState(currentFoils[0]);
   const [accentColor, setAccentColor] = useState(currentAccents[0].value);
   const [bgImage, setBgImage] = useState<string | null>(null);
+  const [bgImageFile, setBgImageFile] = useState<File | null>(null);
   const [bgColor, setBgColor] = useState(PVC_BACKGROUND_COLORS[0].value);
   const [overlayOpacity, setOverlayOpacity] = useState(50);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setBgImageFile(file);
       const url = URL.createObjectURL(file);
       setBgImage(url);
     }
@@ -242,11 +245,77 @@ export default function ThreeDCardCustomizer() {
   const [fontStyle, setFontStyle] = useState(CARD_FONTS[0]);
 
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isCheckoutMode, setIsCheckoutMode] = useState(false);
 
   // Pricing Logic
   const basePrice = isPVC ? 1500 : 2500;
   const customBgPrice = bgImage ? 500 : 0;
   const totalPrice = basePrice + customBgPrice;
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  const saveDesignToBackend = async (status: "CART" | "TEMPORARY") => {
+    setIsSaving(true);
+    try {
+      const cardConfig = {
+        productName,
+        basePrice,
+        customBgPrice,
+        totalPrice,
+        foilColor: foil.value,
+        foilLabel: foil.label,
+        accentColor,
+        bgColor,
+        bgImage, // this will be updated by the backend if a file is uploaded
+        displayName,
+        designation,
+        email,
+        phone,
+        website,
+        fontStyle: fontStyle.label,
+      };
+
+      const formData = new FormData();
+      formData.append("status", status);
+      formData.append("config", JSON.stringify(cardConfig));
+      if (bgImageFile) {
+        formData.append("bgImageFile", bgImageFile);
+      }
+
+      const res = await fetch("http://localhost:4000/api/v1/designs", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success && data.design) {
+        return data.design.id;
+      } else {
+        throw new Error("Failed to save design");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Something went wrong while saving your design. Please try again.");
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    const designId = await saveDesignToBackend("TEMPORARY");
+    if (designId) {
+      router.push(`/order?id=${designId}`);
+    }
+  };
+
+  const handleAddToCart = async () => {
+    const designId = await saveDesignToBackend("CART");
+    if (designId) {
+      alert("Design added to cart! It will be saved for 3 days.");
+      setIsCheckoutMode(false);
+    }
+  };
 
   return (
     <div className="w-full h-full max-w-[1600px] mx-auto px-6 py-6 lg:py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-0">
@@ -464,9 +533,19 @@ export default function ThreeDCardCustomizer() {
       <div className="lg:col-span-5 flex flex-col h-full min-h-0 pb-2 lg:pb-0">
         <div className="bg-white/60 backdrop-blur-3xl rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] ring-1 ring-neutral-900/5 flex flex-col h-full overflow-hidden relative">
 
-          <div className="p-6 lg:p-8 pb-4 border-b border-neutral-900/5 shrink-0 z-10 relative">
-            <h2 className="text-3xl font-black text-neutral-900 tracking-tight mb-1">Studio</h2>
-            <p className="text-neutral-500 text-sm mb-8 font-medium">Fine-tune your premium {productName} card.</p>
+          <AnimatePresence mode="wait">
+            {!isCheckoutMode ? (
+              <motion.div
+                key="studio"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col h-full min-h-0"
+              >
+                <div className="p-6 lg:p-8 pb-4 border-b border-neutral-900/5 shrink-0 z-10 relative">
+                  <h2 className="text-3xl font-black text-neutral-900 tracking-tight mb-1">Studio</h2>
+                  <p className="text-neutral-500 text-sm mb-8 font-medium">Fine-tune your premium {productName} card.</p>
 
             {/* Apple-style Segmented Control */}
             <div className="flex bg-neutral-900/5 p-1.5 rounded-[1.25rem] relative">
@@ -525,6 +604,13 @@ export default function ThreeDCardCustomizer() {
                             <span>{fc.label}</span>
                           </button>
                         ))}
+                        <label className={`relative py-3 px-2 rounded-[1.25rem] border flex flex-col items-center justify-center gap-2.5 text-[11px] text-center leading-tight font-bold transition-all group cursor-pointer ${foil.id === "custom" ? "border-neutral-900 ring-1 ring-neutral-900 bg-white text-neutral-900 shadow-md" : "border-neutral-900/10 bg-white/50 text-neutral-600 hover:border-neutral-900/30 hover:bg-white"}`}>
+                          <div className="w-7 h-7 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)] border border-black/10 group-hover:scale-110 transition-transform bg-gradient-to-tr from-rose-500 via-purple-500 to-blue-500 flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                          </div>
+                          <span>Custom Color</span>
+                          <input type="color" className="absolute opacity-0 w-0 h-0" value={foil.value} onChange={(e) => setFoil({ id: "custom", label: "Custom", value: e.target.value, light: e.target.value })} />
+                        </label>
                       </div>
                     </div>
                     <div>
@@ -537,6 +623,13 @@ export default function ThreeDCardCustomizer() {
                             <div className="w-7 h-7 rounded-full shadow-[inset_0_2px_6px_rgba(0,0,0,0.3)] border border-white/20 group-hover:scale-110 transition-transform" style={{ backgroundColor: ac.value }}></div>{ac.label}
                           </button>
                         ))}
+                        <label className={`relative py-4 px-4 rounded-[1.25rem] border flex flex-col items-center justify-center gap-3 text-xs font-bold transition-all group cursor-pointer ${!currentAccents.some(ac => ac.value === accentColor) ? "border-neutral-900 ring-1 ring-neutral-900 bg-white text-neutral-900 shadow-md" : "border-neutral-900/10 bg-white/50 text-neutral-600 hover:border-neutral-900/30 hover:bg-white"}`}>
+                          <div className="w-7 h-7 rounded-full shadow-[inset_0_2px_6px_rgba(0,0,0,0.3)] border border-white/20 group-hover:scale-110 transition-transform bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                          </div>
+                          <span>Custom Color</span>
+                          <input type="color" className="absolute opacity-0 w-0 h-0" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} />
+                        </label>
                       </div>
                     </div>
                   </motion.div>
@@ -556,6 +649,13 @@ export default function ThreeDCardCustomizer() {
                             <span>{bgC.label}</span>
                           </button>
                         ))}
+                        <label className={`relative py-3 px-2 rounded-[1.25rem] border flex flex-col items-center justify-center gap-2.5 text-[11px] text-center leading-tight font-bold transition-all group cursor-pointer ${!PVC_BACKGROUND_COLORS.some(bgC => bgC.value === bgColor) && !bgImage ? "border-neutral-900 ring-1 ring-neutral-900 bg-white text-neutral-900 shadow-md" : "border-neutral-900/10 bg-white/50 text-neutral-600 hover:border-neutral-900/30 hover:bg-white"}`}>
+                          <div className="w-7 h-7 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)] border border-black/10 group-hover:scale-110 transition-transform bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                          </div>
+                          <span>Custom Color</span>
+                          <input type="color" className="absolute opacity-0 w-0 h-0" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgImage(null); }} />
+                        </label>
                       </div>
                     </div>
                     <div>
@@ -649,12 +749,87 @@ export default function ThreeDCardCustomizer() {
                 <p className="text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-0.5">Total Investment</p>
                 <p className="text-xl font-bold text-neutral-900 tracking-tight">LKR {totalPrice.toLocaleString()}</p>
               </div>
-              <button className="px-8 py-4 rounded-2xl font-black text-white uppercase tracking-[0.15em] text-xs bg-neutral-900 hover:bg-black shadow-md transition-all hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 relative overflow-hidden group">
+              <button onClick={() => setIsCheckoutMode(true)} className="px-8 py-4 rounded-2xl font-black text-white uppercase tracking-[0.15em] text-xs bg-neutral-900 hover:bg-black shadow-md transition-all hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 relative overflow-hidden group">
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
                 Finalize Design
               </button>
             </div>
           </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="checkout"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col h-full min-h-0"
+              >
+                <div className="p-6 lg:p-8 pb-4 shrink-0 flex items-center justify-between border-b border-neutral-900/5">
+                  <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Order Summary</h2>
+                  <button onClick={() => setIsCheckoutMode(false)} className="w-10 h-10 rounded-full bg-neutral-900/5 flex items-center justify-center hover:bg-neutral-900/10 transition-colors">
+                    <svg className="w-5 h-5 text-neutral-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                </div>
+
+                <div className="flex-1 p-6 lg:p-8 overflow-y-auto flex flex-col justify-center space-y-6">
+                  {/* Premium Receipt Card */}
+                  <div className="bg-white rounded-[2rem] p-8 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] border border-neutral-900/5 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-neutral-900 to-neutral-700"></div>
+                    
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="flex flex-col">
+                        <span className="text-neutral-900 font-black text-xl tracking-tight">{productName}</span>
+                        <span className="text-neutral-500 text-xs font-bold uppercase tracking-widest mt-1">Premium NFC Card</span>
+                      </div>
+                      <span className="font-black text-lg text-neutral-900">LKR {basePrice.toLocaleString()}</span>
+                    </div>
+
+                    {customBgPrice > 0 && (
+                      <div className="flex justify-between items-center mb-6 p-4 rounded-2xl bg-neutral-900/5 border border-neutral-900/5">
+                        <div className="flex flex-col">
+                          <span className="text-neutral-900 font-bold text-sm">Custom Background</span>
+                          <span className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest mt-0.5">Premium Add-on</span>
+                        </div>
+                        <span className="font-bold text-sm text-neutral-900">LKR {customBgPrice.toLocaleString()}</span>
+                      </div>
+                    )}
+                    
+                    <div className="w-full border-t border-dashed border-neutral-200 my-6"></div>
+                    
+                    <div className="flex justify-between items-end">
+                      <div className="flex flex-col">
+                        <span className="text-neutral-400 font-black uppercase tracking-[0.2em] text-[10px] mb-1">Total Investment</span>
+                        <span className="text-neutral-900 font-black text-4xl tracking-tighter leading-none">LKR {totalPrice.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Value Prop */}
+                  <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[2rem] p-6 text-white shadow-lg shadow-emerald-500/20 flex items-center gap-5">
+                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md">
+                      <CheckCircle className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-sm tracking-wide mb-1">Free Lifetime Software</h4>
+                      <p className="text-emerald-50 text-xs font-medium leading-relaxed opacity-90">Includes powerful digital profile management with absolutely zero monthly fees forever.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 lg:p-8 pt-4 shrink-0 bg-white/80 backdrop-blur-xl border-t border-neutral-900/5 space-y-3">
+                  <button onClick={handleBuyNow} disabled={isSaving} className="w-full bg-neutral-900 hover:bg-black disabled:bg-neutral-400 text-white py-5 rounded-2xl font-black tracking-[0.15em] uppercase text-xs transition-all shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.5)] active:translate-y-0 flex items-center justify-center gap-3 group relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
+                    {isSaving ? "Saving..." : "Buy Now"}
+                    {!isSaving && <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>}
+                  </button>
+                  <button onClick={handleAddToCart} disabled={isSaving} className="w-full bg-white disabled:opacity-50 border-2 border-neutral-200 hover:border-neutral-900 hover:bg-neutral-900 hover:text-white text-neutral-900 py-4 rounded-2xl font-black tracking-[0.15em] uppercase text-xs transition-all flex items-center justify-center gap-3">
+                    Add to Cart
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
