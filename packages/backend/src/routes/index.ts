@@ -9,6 +9,7 @@ import { profileRouter } from './profileRoutes';
 import { linkRouter } from './linkRoutes';
 import adminRouter from './adminRoutes';
 import designsRouter from './designs.routes';
+import { paymentRouter } from './paymentRoutes';
 
 export const apiRouter = Router();
 
@@ -26,6 +27,9 @@ apiRouter.use('/admin', adminRouter);
 
 /** Design saving endpoints */
 apiRouter.use('/designs', designsRouter);
+
+/** Payment & Subscription Gateway endpoints */
+apiRouter.use('/payments', paymentRouter);
 
 /** API version info */
 apiRouter.get('/', (_req, res) => {

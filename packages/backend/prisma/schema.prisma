@@ -100,8 +100,15 @@ model User {
   role             UserRole         @default(USER)
   subscriptionTier SubscriptionTier @default(FREE)
 
+  // Payment & Subscription Gateway Fields
+  stripeCustomerId      String? @unique
+  stripeSubscriptionId  String? @unique
+  payhereSubscriptionId String? @unique
+  subscriptionStatus    String? @default("ACTIVE")
+  currentPeriodEnd      DateTime?
+
   // Relations
-  profile       Profile?
+  profiles      Profile[]
   orders        Order[]
   assignedCards NfcCardItem[]
 
@@ -131,15 +138,17 @@ model Profile {
   /// Total number of times the NFC card has been tapped (profile viewed)
   tapCount Int @default(0)
 
-  // Ownership — 1:1 with User
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Ownership — 1:Many with User
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isDefault Boolean @default(false)
 
   // Relations
   links                Link[]
   verificationRequests VerificationRequest[]
   tapAnalytics         TapAnalytics[]
   linkClicks           LinkClickAnalytics[]
+  leads                Lead[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -391,3 +400,20 @@ model LinkClickAnalytics {
   @@index([linkId])
   @@map("link_click_analytics")
 }
+
+/// Contact / Lead captured from public NFC profile page when visitors tap the card and connect.
+model Lead {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name      String
+  email     String?
+  phone     String?
+  company   String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([profileId])
+  @@map("leads")
+}
+
