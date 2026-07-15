@@ -56,10 +56,34 @@ export interface InstantUpdatePayload {
   website?: string;
 }
 
+export interface AnalyticsData {
+  summary: {
+    totalTaps: number;
+    totalLinkClicks: number;
+    clickThroughRate: number;
+    uniqueVisitors: number;
+  };
+  tapsByDevice: Array<{ device: string; count: number; percentage: number }>;
+  tapsByLocation: Array<{ location: string; country: string; city: string; count: number; percentage: number }>;
+  activityOverTime: Array<{ date: string; taps: number; clicks: number }>;
+  topClickedLinks: Array<{ id: string; platform: string; label: string; url: string; clickCount: number; isActive: boolean }>;
+  recentActivity: Array<{
+    id: string;
+    type: 'TAP' | 'CLICK';
+    timestamp: string;
+    location: string;
+    device: string;
+    browser: string;
+    os: string;
+    detail: string;
+  }>;
+}
+
 // ── Query Keys ────────────────────────────────────────────────
 export const profileKeys = {
-  all:  ['profile'] as const,
-  me:   () => [...profileKeys.all, 'me'] as const,
+  all:       ['profile'] as const,
+  me:        () => [...profileKeys.all, 'me'] as const,
+  analytics: () => [...profileKeys.all, 'analytics'] as const,
 };
 
 // ── Hooks ─────────────────────────────────────────────────────
@@ -82,13 +106,30 @@ export function useMyProfile() {
 }
 
 /**
+ * Fetches full-granularity aggregated analytics for the authenticated user's profile.
+ * Cached with staleTime: 5 mins to prevent heavy database re-aggregations on tab switches.
+ */
+export function useProfileAnalytics() {
+  return useQuery<AnalyticsData, AxiosError>({
+    queryKey: profileKeys.analytics(),
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<AnalyticsData>>('/profile/analytics');
+      if (!res.data.data) throw new Error('No analytics data in response');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes caching
+    retry: 2,
+  });
+}
+
+/**
  * Instantly updates standard profile fields (bio, phone, email, etc.)
  * Uses optimistic update — UI reflects changes immediately.
  */
 export function useInstantUpdate() {
   const queryClient = useQueryClient();
 
-  return useMutation<Profile, AxiosError, InstantUpdatePayload>({
+  return useMutation<Profile, AxiosError, InstantUpdatePayload, { previousProfile?: Profile }>({
     mutationFn: async (data) => {
       const res = await apiClient.patch<ApiResponse<Profile>>('/profile/instant', data);
       if (!res.data.data) throw new Error('No profile data returned');
@@ -108,7 +149,7 @@ export function useInstantUpdate() {
 
       return { previousProfile };
     },
-    onError: (_err, _newData, context: { previousProfile?: Profile } | undefined) => {
+    onError: (_err, _newData, context) => {
       // Roll back to the previous value on error
       if (context?.previousProfile) {
         queryClient.setQueryData(profileKeys.me(), context.previousProfile);
@@ -128,7 +169,7 @@ export function useInstantUpdate() {
 export function useTogglePrivacy() {
   const queryClient = useQueryClient();
 
-  return useMutation<{ id: string; status: string }, AxiosError, void>({
+  return useMutation<{ id: string; status: string }, AxiosError, void, { previousProfile?: Profile }>({
     mutationFn: async () => {
       const res = await apiClient.patch<ApiResponse<{ id: string; status: string }>>(
         '/profile/privacy',
@@ -151,7 +192,7 @@ export function useTogglePrivacy() {
 
       return { previousProfile };
     },
-    onError: (_err, _void, context: { previousProfile?: Profile } | undefined) => {
+    onError: (_err, _void, context) => {
       if (context?.previousProfile) {
         queryClient.setQueryData(profileKeys.me(), context.previousProfile);
       }

@@ -14,6 +14,8 @@ async function main(): Promise<void> {
 
   // ── Cleanup previous seed data ──────────────────────────────
   await prisma.verificationRequest.deleteMany();
+  await prisma.linkClickAnalytics.deleteMany();
+  await prisma.tapAnalytics.deleteMany();
   await prisma.link.deleteMany();
   await prisma.profile.deleteMany();
   await prisma.user.deleteMany();
@@ -93,6 +95,83 @@ async function main(): Promise<void> {
   console.log('✅ Demo user created:', user.email);
   console.log('✅ Profile username:', user.profile?.username);
   console.log('✅ Links created:', user.profile?.links.length);
+
+  // ── Seed mock TapAnalytics & LinkClickAnalytics ─────────────
+  if (user.profile) {
+    const profileId = user.profile.id;
+    const links = user.profile.links;
+    const now = new Date();
+
+    const devices = ["Mobile", "Mobile", "Mobile", "Desktop", "Tablet"];
+    const browsers = ["Safari", "Chrome", "Chrome", "Firefox", "Safari"];
+    const osList = ["iOS", "Android", "iOS", "macOS", "iPadOS"];
+    const locations = [
+      { location: "Colombo, LK", country: "LK", city: "Colombo" },
+      { location: "New York, US", country: "US", city: "New York" },
+      { location: "London, UK", country: "UK", city: "London" },
+      { location: "Tokyo, JP", country: "JP", city: "Tokyo" },
+      { location: "Sydney, AU", country: "AU", city: "Sydney" },
+    ];
+
+    const tapRecords = [];
+    for (let i = 0; i < 45; i++) {
+      const daysAgo = Math.floor(Math.random() * 30);
+      const hoursAgo = Math.floor(Math.random() * 24);
+      const timestamp = new Date(now.getTime() - (daysAgo * 24 * 60 + hoursAgo * 60) * 60 * 1000);
+      const loc = locations[i % locations.length];
+      const deviceIdx = i % devices.length;
+
+      tapRecords.push({
+        profileId,
+        timestamp,
+        ipAddress: `192.168.1.${10 + i}`,
+        userAgent: `${devices[deviceIdx]} (${osList[deviceIdx]}; ${browsers[deviceIdx]})`,
+        device: devices[deviceIdx],
+        browser: browsers[deviceIdx],
+        os: osList[deviceIdx],
+        location: loc.location,
+        country: loc.country,
+        city: loc.city,
+      });
+    }
+    await prisma.tapAnalytics.createMany({ data: tapRecords });
+    console.log('✅ Seeded mock TapAnalytics records:', tapRecords.length);
+
+    if (links.length > 0) {
+      const clickRecords = [];
+      for (const link of links) {
+        const clicksCount = Math.floor(Math.random() * 12) + 4;
+        await prisma.link.update({
+          where: { id: link.id },
+          data: { clickCount: clicksCount },
+        });
+
+        for (let j = 0; j < clicksCount; j++) {
+          const daysAgo = Math.floor(Math.random() * 30);
+          const timestamp = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+          const loc = locations[j % locations.length];
+          const deviceIdx = j % devices.length;
+
+          clickRecords.push({
+            profileId,
+            linkId: link.id,
+            timestamp,
+            ipAddress: `192.168.1.${50 + j}`,
+            userAgent: `${devices[deviceIdx]} (${osList[deviceIdx]}; ${browsers[deviceIdx]})`,
+            device: devices[deviceIdx],
+            browser: browsers[deviceIdx],
+            os: osList[deviceIdx],
+            location: loc.location,
+            country: loc.country,
+            city: loc.city,
+          });
+        }
+      }
+      await prisma.linkClickAnalytics.createMany({ data: clickRecords });
+      console.log('✅ Seeded mock LinkClickAnalytics records:', clickRecords.length);
+    }
+  }
+
   console.log('\n🎉 Seed complete! Visit: http://localhost:3000/p/alexmorgan');
 }
 

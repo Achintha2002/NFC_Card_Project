@@ -77,7 +77,8 @@ export function useToggleLink() {
   return useMutation<
     { id: string; isActive: boolean; label: string; platform: string },
     AxiosError,
-    string // linkId
+    string, // linkId
+    { previousLinks?: ProfileLink[] }
   >({
     mutationFn: async (linkId) => {
       const res = await apiClient.patch<
@@ -99,7 +100,7 @@ export function useToggleLink() {
 
       return { previousLinks };
     },
-    onError: (_err, _linkId, context: { previousLinks?: ProfileLink[] } | undefined) => {
+    onError: (_err, _linkId, context) => {
       if (context?.previousLinks) {
         queryClient.setQueryData(linkKeys.list(), context.previousLinks);
       }
@@ -116,7 +117,7 @@ export function useToggleLink() {
 export function useDeleteLink() {
   const queryClient = useQueryClient();
 
-  return useMutation<void, AxiosError, string>({
+  return useMutation<void, AxiosError, string, { previousLinks?: ProfileLink[] }>({
     mutationFn: async (linkId) => {
       await apiClient.delete(`/links/${linkId}`);
     },
@@ -130,7 +131,7 @@ export function useDeleteLink() {
 
       return { previousLinks };
     },
-    onError: (_err, _linkId, context: { previousLinks?: ProfileLink[] } | undefined) => {
+    onError: (_err, _linkId, context) => {
       if (context?.previousLinks) {
         queryClient.setQueryData(linkKeys.list(), context.previousLinks);
       }
@@ -147,7 +148,7 @@ export function useDeleteLink() {
 export function useReorderLinks() {
   const queryClient = useQueryClient();
 
-  return useMutation<void, AxiosError, ReorderItem[]>({
+  return useMutation<void, AxiosError, ReorderItem[], { previousLinks?: ProfileLink[] }>({
     mutationFn: async (items) => {
       await apiClient.patch('/links/reorder', items);
     },
@@ -168,7 +169,7 @@ export function useReorderLinks() {
 
       return { previousLinks };
     },
-    onError: (_err, _items, context: { previousLinks?: ProfileLink[] } | undefined) => {
+    onError: (_err, _items, context) => {
       if (context?.previousLinks) {
         queryClient.setQueryData(linkKeys.list(), context.previousLinks);
       }

@@ -12,6 +12,7 @@ import {
   moderatedUpdate,
   togglePrivacy,
   getMyProfile,
+  getProfileAnalytics,
 } from '../controllers/profileController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { uploadFields } from '../middlewares/uploadMiddleware';
@@ -23,6 +24,9 @@ export const profileRouter = Router();
 
 /** GET /api/v1/profile/me — Protected (must come before :username to avoid collision) */
 profileRouter.get('/me', authMiddleware, getMyProfile);
+
+/** GET /api/v1/profile/analytics — Protected analytics endpoint (must come before :username) */
+profileRouter.get('/analytics', authMiddleware, getProfileAnalytics);
 
 /** GET /api/v1/profile/:username — Public profile fetch */
 profileRouter.get('/:username', getPublicProfile);

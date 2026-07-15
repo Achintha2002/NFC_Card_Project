@@ -211,6 +211,8 @@ export function ProfileCard({ profile, apiUrl }: ProfileCardProps) {
               {profile.links.map((link, index) => (
                 <LinkButton
                   key={link.id}
+                  linkId={link.id}
+                  apiUrl={apiUrl}
                   platform={link.platform}
                   url={link.url}
                   label={link.label}

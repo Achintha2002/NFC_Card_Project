@@ -9,15 +9,27 @@ import React from 'react';
 import { getPlatformIcon, platformColors } from './SocialIcons';
 
 interface LinkButtonProps {
+  linkId?: string;
+  apiUrl?: string;
   platform: string;
   url: string;
   label: string;
   index: number; // For staggered animation delay
 }
 
-export function LinkButton({ platform, url, label, index }: LinkButtonProps) {
+export function LinkButton({ linkId, apiUrl, platform, url, label, index }: LinkButtonProps) {
   const bgColor = platformColors[platform.toUpperCase()] ?? platformColors['CUSTOM'];
   const delay = Math.min(index * 0.08, 0.8); // Cap at 0.8s
+
+  /** Triggers link click analytics asynchronously without delaying navigation */
+  const handleClick = () => {
+    if (linkId && apiUrl) {
+      fetch(`${apiUrl}/api/v1/links/${linkId}/click`, {
+        method: 'POST',
+        keepalive: true,
+      }).catch(() => {});
+    }
+  };
 
   /**
    * Build the correct href format.
@@ -36,6 +48,7 @@ export function LinkButton({ platform, url, label, index }: LinkButtonProps) {
   return (
     <a
       href={getHref()}
+      onClick={handleClick}
       target={platform !== 'PHONE' && platform !== 'EMAIL' ? '_blank' : undefined}
       rel="noopener noreferrer"
       id={`link-${platform.toLowerCase()}-${index}`}

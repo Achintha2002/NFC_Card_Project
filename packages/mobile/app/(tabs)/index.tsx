@@ -3,7 +3,7 @@
 //  Tab 1: Analytics overview + Stealth Mode quick toggle
 // ============================================================
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,10 +16,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius, Typography, Shadow } from '../../constants/theme';
 import { AnalyticsCard } from '../../components/AnalyticsCard';
 import { StealthToggle } from '../../components/StealthToggle';
-import { useMyProfile } from '../../hooks/useProfile';
+import { useMyProfile, useProfileAnalytics } from '../../hooks/useProfile';
 
 export default function DashboardScreen() {
-  const { data: profile, isLoading, isError, refetch, isRefetching } = useMyProfile();
+  const { data: profile, isLoading: isProfileLoading, isError, refetch: refetchProfile, isRefetching: isProfileRefetching } = useMyProfile();
+  const { data: analytics, isLoading: isAnalyticsLoading, refetch: refetchAnalytics, isRefetching: isAnalyticsRefetching } = useProfileAnalytics();
+
+  const isLoading = isProfileLoading || isAnalyticsLoading;
+  const isRefetching = isProfileRefetching || isAnalyticsRefetching;
+
+  const handleRefresh = useCallback(() => {
+    refetchProfile();
+    refetchAnalytics();
+  }, [refetchProfile, refetchAnalytics]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -30,7 +39,7 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
-            onRefresh={refetch}
+            onRefresh={handleRefresh}
             tintColor={Colors.primary}
             colors={[Colors.primary]}
           />
@@ -60,9 +69,10 @@ export default function DashboardScreen() {
         />
 
         {/* ── Analytics ───────────────────────────────────── */}
-        <SectionLabel>Analytics</SectionLabel>
+        <SectionLabel>Analytics Intelligence</SectionLabel>
         <AnalyticsCard
           tapCount={profile?.tapCount ?? 0}
+          analytics={analytics}
           isLoading={isLoading}
         />
 

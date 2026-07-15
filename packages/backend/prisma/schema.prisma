@@ -138,6 +138,8 @@ model Profile {
   // Relations
   links                Link[]
   verificationRequests VerificationRequest[]
+  tapAnalytics         TapAnalytics[]
+  linkClicks           LinkClickAnalytics[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -156,10 +158,12 @@ model Link {
   iconType  String? // Optional override for custom icon key
   sortOrder Int          @default(0) // Controls display order
   isActive  Boolean      @default(true) // Toggled instantly via mobile app
+  clickCount Int         @default(0)
 
   // Ownership — many:1 with Profile
   profileId String
   profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  clickAnalytics LinkClickAnalytics[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -339,4 +343,51 @@ model OrderItem {
   cardDesign   CardDesign? @relation(fields: [cardDesignId], references: [id], onDelete: SetNull)
 
   @@map("order_items")
+}
+
+// ============================================================
+//  ANALYTICS MODELS
+// ============================================================
+
+/// Full-granularity tracking for every public profile tap/view.
+model TapAnalytics {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  timestamp   DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  device      String? // "Mobile", "Desktop", "Tablet", "Unknown"
+  browser     String? // "Chrome", "Safari", "Firefox", etc.
+  os          String? // "iOS", "Android", "macOS", "Windows", etc.
+  location    String? // e.g. "New York, US", "Colombo, LK"
+  country     String?
+  city        String?
+  referrer    String?
+
+  @@index([profileId])
+  @@index([timestamp(sort: Desc)])
+  @@map("tap_analytics")
+}
+
+/// Full-granularity tracking for link clicks on the public profile.
+model LinkClickAnalytics {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  linkId      String
+  link        Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  timestamp   DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  device      String?
+  browser     String?
+  os          String?
+  location    String?
+  country     String?
+  city        String?
+
+  @@index([profileId])
+  @@index([linkId])
+  @@map("link_click_analytics")
 }

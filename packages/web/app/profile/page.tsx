@@ -27,9 +27,11 @@ import {
   RefreshCw,
   Sun,
   Moon,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/services/api";
+import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -37,6 +39,9 @@ export default function ProfilePage() {
 
   // Theme State (Default: light mode to match NFC Studio Customizer & Homepage)
   const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState<"settings" | "analytics">("settings");
 
   // Form State
   const [displayName, setDisplayName] = useState("");
@@ -253,7 +258,47 @@ export default function ProfilePage() {
 
       {/* ── Main Dashboard Layout ── */}
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Top Level Tab Navigation */}
+        <div className="flex items-center justify-between gap-4 mb-8 pb-4 border-b border-neutral-200/60 dark:border-neutral-800/60 flex-wrap">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={`flex items-center gap-2.5 px-5 py-2.5 rounded-2xl text-xs font-extrabold uppercase tracking-wider transition-all ${
+                activeTab === "settings"
+                  ? "bg-gradient-to-r from-rose-600 to-orange-500 text-white shadow-lg shadow-rose-500/25"
+                  : isLight
+                  ? "bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 shadow-sm"
+                  : "bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white"
+              }`}
+            >
+              <UserIcon className="w-4 h-4" />
+              <span>Profile & Account Settings</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("analytics")}
+              className={`flex items-center gap-2.5 px-5 py-2.5 rounded-2xl text-xs font-extrabold uppercase tracking-wider transition-all ${
+                activeTab === "analytics"
+                  ? "bg-gradient-to-r from-rose-600 to-orange-500 text-white shadow-lg shadow-rose-500/25"
+                  : isLight
+                  ? "bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 shadow-sm"
+                  : "bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white"
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>Analytics & Insights</span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black tracking-normal">
+                NEW
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {activeTab === "analytics" ? (
+          <AnalyticsDashboard theme={theme} />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* ── Left Sidebar: Account Identity & Status Card ── */}
           <div className="lg:col-span-4 flex flex-col gap-6">
@@ -737,6 +782,7 @@ export default function ProfilePage() {
           </div>
 
         </div>
+        )}
       </main>
     </div>
   );

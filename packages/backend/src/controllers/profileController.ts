@@ -13,6 +13,7 @@ import { prisma } from '../config/database';
 import { sendSuccess, sendError } from '../utils/responseHelper';
 import { AppError } from '../middlewares/errorMiddleware';
 import { generateVCardBuffer } from '../utils/vcardGenerator';
+import { parseUserAgent, resolveLocation } from '../utils/analyticsHelper';
 
 // ── Validation Schemas ────────────────────────────────────────
 
@@ -73,15 +74,36 @@ export async function getPublicProfile(
       return;
     }
 
-    // Increment tap count asynchronously (fire-and-forget to avoid blocking)
-    prisma.profile
-      .update({
+    // Increment tap count and record TapAnalytics asynchronously (fire-and-forget)
+    const rawIp = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket.remoteAddress;
+    const uaString = req.headers['user-agent'];
+    const parsedUa = parseUserAgent(uaString);
+    const referrer = req.headers['referer'] || req.headers['referrer'] || null;
+
+    Promise.all([
+      prisma.profile.update({
         where: { id: profile.id },
         data: { tapCount: { increment: 1 } },
-      })
-      .catch((err: Error) =>
-        console.warn('⚠️ Failed to increment tap count:', err.message),
-      );
+      }),
+      resolveLocation(rawIp, req.headers as Record<string, string | string[] | undefined>).then((geo) =>
+        prisma.tapAnalytics.create({
+          data: {
+            profileId: profile.id,
+            ipAddress: geo.ip,
+            userAgent: uaString,
+            device: parsedUa.device,
+            browser: parsedUa.browser,
+            os: parsedUa.os,
+            location: geo.location,
+            country: geo.country,
+            city: geo.city,
+            referrer: typeof referrer === 'string' ? referrer : null,
+          },
+        })
+      ),
+    ]).catch((err: Error) =>
+      console.warn('⚠️ Failed to record tap & analytics:', err.message),
+    );
 
     // Strip sensitive fields before sending public response
     const { userId: _userId, ...publicProfile } = profile;
@@ -366,6 +388,173 @@ export async function getMyProfile(
     }
 
     sendSuccess(res, profile);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/v1/profile/analytics
+ * Protected. Returns full-granularity aggregated analytics for the user's profile
+ * including KPIs, device/location breakdowns, time-series data, and recent activity.
+ */
+export async function getProfileAnalytics(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { profileId } = req.user!;
+
+    const profile = await prisma.profile.findUnique({
+      where: { id: profileId },
+      select: { id: true, tapCount: true },
+    });
+
+    if (!profile) {
+      throw new AppError('Profile not found.', 404);
+    }
+
+    // ── 1. Summary KPIs ──────────────────────────────────────────
+    const [totalTapsDb, totalLinkClicks, uniqueIps] = await Promise.all([
+      prisma.tapAnalytics.count({ where: { profileId } }),
+      prisma.linkClickAnalytics.count({ where: { profileId } }),
+      prisma.tapAnalytics.findMany({
+        where: { profileId, ipAddress: { not: null } },
+        select: { ipAddress: true },
+        distinct: ['ipAddress'],
+      }),
+    ]);
+
+    const totalTaps = Math.max(profile.tapCount, totalTapsDb);
+    const uniqueVisitors = uniqueIps.length;
+    const clickThroughRate = totalTaps > 0 ? Number(((totalLinkClicks / totalTaps) * 100).toFixed(1)) : 0;
+
+    // ── 2. Device Breakdown ──────────────────────────────────────
+    const deviceGroups = await prisma.tapAnalytics.groupBy({
+      by: ['device'],
+      where: { profileId },
+      _count: { _all: true },
+    });
+
+    const tapsByDevice = deviceGroups.map((g) => ({
+      device: g.device || 'Unknown',
+      count: g._count._all,
+      percentage: totalTaps > 0 ? Number(((g._count._all / totalTaps) * 100).toFixed(1)) : 0,
+    }));
+
+    // ── 3. Location Breakdown ────────────────────────────────────
+    const locationGroups = await prisma.tapAnalytics.groupBy({
+      by: ['location', 'country', 'city'],
+      where: { profileId },
+      _count: { _all: true },
+      orderBy: { _count: { location: 'desc' } },
+      take: 10,
+    });
+
+    const tapsByLocation = locationGroups.map((l) => ({
+      location: l.location || 'Unknown',
+      country: l.country || 'Unknown',
+      city: l.city || 'Unknown',
+      count: l._count._all,
+      percentage: totalTaps > 0 ? Number(((l._count._all / totalTaps) * 100).toFixed(1)) : 0,
+    }));
+
+    // ── 4. Time-series Activity (Last 30 Days) ───────────────────
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [recentTaps, recentClicks, profileLinks] = await Promise.all([
+      prisma.tapAnalytics.findMany({
+        where: { profileId, timestamp: { gte: thirtyDaysAgo } },
+        select: { timestamp: true },
+        orderBy: { timestamp: 'asc' },
+      }),
+      prisma.linkClickAnalytics.findMany({
+        where: { profileId, timestamp: { gte: thirtyDaysAgo } },
+        select: { timestamp: true },
+        orderBy: { timestamp: 'asc' },
+      }),
+      prisma.link.findMany({
+        where: { profileId },
+        orderBy: { clickCount: 'desc' },
+      }),
+    ]);
+
+    // Map into dates: YYYY-MM-DD
+    const activityMap: Record<string, { date: string; taps: number; clicks: number }> = {};
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      activityMap[dateStr] = { date: dateStr, taps: 0, clicks: 0 };
+    }
+
+    for (const t of recentTaps) {
+      const dateStr = t.timestamp.toISOString().split('T')[0];
+      if (activityMap[dateStr]) activityMap[dateStr].taps++;
+    }
+
+    for (const c of recentClicks) {
+      const dateStr = c.timestamp.toISOString().split('T')[0];
+      if (activityMap[dateStr]) activityMap[dateStr].clicks++;
+    }
+
+    const activityOverTime = Object.values(activityMap);
+
+    // ── 5. Recent Activity Feed ──────────────────────────────────
+    const [latestTaps, latestClicks] = await Promise.all([
+      prisma.tapAnalytics.findMany({
+        where: { profileId },
+        orderBy: { timestamp: 'desc' },
+        take: 15,
+      }),
+      prisma.linkClickAnalytics.findMany({
+        where: { profileId },
+        include: { link: { select: { label: true, platform: true } } },
+        orderBy: { timestamp: 'desc' },
+        take: 15,
+      }),
+    ]);
+
+    const combinedActivity = [
+      ...latestTaps.map((t) => ({
+        id: `tap-${t.id}`,
+        type: 'TAP' as const,
+        timestamp: t.timestamp,
+        location: t.location || 'Unknown',
+        device: t.device || 'Unknown',
+        browser: t.browser || 'Unknown',
+        os: t.os || 'Unknown',
+        detail: 'NFC Card Tapped / Profile Viewed',
+      })),
+      ...latestClicks.map((c) => ({
+        id: `click-${c.id}`,
+        type: 'CLICK' as const,
+        timestamp: c.timestamp,
+        location: c.location || 'Unknown',
+        device: c.device || 'Unknown',
+        browser: c.browser || 'Unknown',
+        os: c.os || 'Unknown',
+        detail: `Clicked link: ${c.link?.label || 'Link'} (${c.link?.platform || 'CUSTOM'})`,
+      })),
+    ]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 25);
+
+    sendSuccess(res, {
+      summary: {
+        totalTaps,
+        totalLinkClicks,
+        clickThroughRate,
+        uniqueVisitors,
+      },
+      tapsByDevice,
+      tapsByLocation,
+      activityOverTime,
+      topClickedLinks: profileLinks,
+      recentActivity: combinedActivity,
+    });
   } catch (error) {
     next(error);
   }

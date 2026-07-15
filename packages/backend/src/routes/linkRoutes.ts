@@ -10,12 +10,25 @@ import {
   toggleLink,
   deleteLink,
   reorderLinks,
+  recordLinkClick,
 } from '../controllers/linkController';
 import { authMiddleware } from '../middlewares/authMiddleware';
+import rateLimit from 'express-rate-limit';
 
 export const linkRouter = Router();
 
-// All link routes require authentication
+const clickRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 30, // Limit each IP to 30 link clicks per minute
+  message: { success: false, error: 'Too many clicks recorded from this IP. Please try again in a minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/** POST /api/v1/links/:id/click — Public rate-limited link click tracking (must come before authMiddleware) */
+linkRouter.post('/:id/click', clickRateLimiter, recordLinkClick);
+
+// All subsequent link routes require authentication
 linkRouter.use(authMiddleware);
 
 /** GET /api/v1/links — Fetch all profile links */

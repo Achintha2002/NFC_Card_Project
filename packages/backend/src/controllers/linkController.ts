@@ -10,6 +10,7 @@ import { LinkPlatform } from '@prisma/client';
 import { prisma } from '../config/database';
 import { sendSuccess } from '../utils/responseHelper';
 import { AppError } from '../middlewares/errorMiddleware';
+import { parseUserAgent, resolveLocation } from '../utils/analyticsHelper';
 
 // ── Validation Schemas ────────────────────────────────────────
 
@@ -242,6 +243,63 @@ export async function reorderLinks(
     );
 
     sendSuccess(res, { updated: items.length }, 'Link order updated.');
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/v1/links/:id/click
+ * Public, unauthenticated endpoint.
+ * Increments link clickCount and records LinkClickAnalytics.
+ */
+export async function recordLinkClick(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = req.params;
+
+    const link = await prisma.link.findUnique({
+      where: { id },
+      select: { id: true, profileId: true, url: true, isActive: true },
+    });
+
+    if (!link || !link.isActive) {
+      throw new AppError('Link not available.', 404);
+    }
+
+    const rawIp = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket.remoteAddress;
+    const uaString = req.headers['user-agent'];
+    const parsedUa = parseUserAgent(uaString);
+
+    Promise.all([
+      prisma.link.update({
+        where: { id: link.id },
+        data: { clickCount: { increment: 1 } },
+      }),
+      resolveLocation(rawIp, req.headers as Record<string, string | string[] | undefined>).then((geo) =>
+        prisma.linkClickAnalytics.create({
+          data: {
+            profileId: link.profileId,
+            linkId: link.id,
+            ipAddress: geo.ip,
+            userAgent: uaString,
+            device: parsedUa.device,
+            browser: parsedUa.browser,
+            os: parsedUa.os,
+            location: geo.location,
+            country: geo.country,
+            city: geo.city,
+          },
+        })
+      ),
+    ]).catch((err: Error) =>
+      console.warn('⚠️ Failed to record link click & analytics:', err.message),
+    );
+
+    sendSuccess(res, { url: link.url }, 'Link click recorded.');
   } catch (error) {
     next(error);
   }
