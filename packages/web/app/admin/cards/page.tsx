@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { getAdminNfcCards, createAdminNfcBatch, assignAdminNfcCard, getAdminInventory } from '../../../services/api';
 import { useAdminTheme } from '../AdminThemeContext';
 
