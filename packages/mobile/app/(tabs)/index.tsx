@@ -3,7 +3,7 @@
 //  Tab 1: Analytics overview + Stealth Mode quick toggle
 // ============================================================
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -16,9 +16,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius, Typography, Shadow } from '../../constants/theme';
 import { AnalyticsCard } from '../../components/AnalyticsCard';
 import { StealthToggle } from '../../components/StealthToggle';
+import { QrCodeModal } from '../../components/QrCodeModal';
 import { useMyProfile, useProfileAnalytics } from '../../hooks/useProfile';
 
 export default function DashboardScreen() {
+  const [qrModalVisible, setQrModalVisible] = useState(false);
   const { data: profile, isLoading: isProfileLoading, isError, refetch: refetchProfile, isRefetching: isProfileRefetching } = useMyProfile();
   const { data: analytics, isLoading: isAnalyticsLoading, refetch: refetchAnalytics, isRefetching: isAnalyticsRefetching } = useProfileAnalytics();
 
@@ -56,16 +58,22 @@ export default function DashboardScreen() {
             </Text>
           </View>
 
-          {/* Profile picture placeholder */}
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarEmoji}>👤</Text>
-          </View>
+          {/* Profile picture / QR trigger button */}
+          <TouchableOpacity
+            style={styles.avatarCircle}
+            onPress={() => setQrModalVisible(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Show QR Code"
+          >
+            <Text style={styles.avatarEmoji}>📱</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── NFC Card Preview ────────────────────────────── */}
         <NfcCardPreview
           username={profile?.username}
           isLoading={isLoading}
+          onOpenQr={() => setQrModalVisible(true)}
         />
 
         {/* ── Analytics ───────────────────────────────────── */}
@@ -115,6 +123,19 @@ export default function DashboardScreen() {
 
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>
+
+      {/* ── QR Code Share Modal ───────────────────────────── */}
+      <QrCodeModal
+        visible={qrModalVisible}
+        onClose={() => setQrModalVisible(false)}
+        profileUrl={
+          profile?.username
+            ? `${process.env.EXPO_PUBLIC_API_URL?.replace(':4000', ':3000') ?? 'http://localhost:3000'}/p/${profile.username}`
+            : 'https://tagit.lk'
+        }
+        username={profile?.username}
+        displayName={profile?.displayName}
+      />
     </SafeAreaView>
   );
 }
@@ -127,13 +148,17 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NfcCardPreview({ username, isLoading }: { username?: string; isLoading: boolean }) {
+function NfcCardPreview({ username, isLoading, onOpenQr }: { username?: string; isLoading: boolean; onOpenQr?: () => void }) {
   const cardUrl = username
     ? `${process.env.EXPO_PUBLIC_API_URL?.replace(':4000', ':3000') ?? 'http://localhost:3000'}/p/${username}`
     : null;
 
   return (
-    <View style={[nfcStyles.card, Shadow.lg]}>
+    <TouchableOpacity
+      style={[nfcStyles.card, Shadow.lg]}
+      onPress={onOpenQr}
+      activeOpacity={0.88}
+    >
       <View style={nfcStyles.glowOrb} />
       <View style={nfcStyles.content}>
         <View style={nfcStyles.chipIcon}>
@@ -147,13 +172,17 @@ function NfcCardPreview({ username, isLoading }: { username?: string; isLoading:
         </View>
         <TouchableOpacity
           style={nfcStyles.shareBtn}
-          accessibilityLabel="Share your NFC card link"
+          onPress={(e) => {
+            e.stopPropagation();
+            onOpenQr?.();
+          }}
+          accessibilityLabel="Share your NFC card link or show QR"
           accessibilityRole="button"
         >
-          <Text style={{ fontSize: 16 }}>↗</Text>
+          <Text style={{ fontSize: 16 }}>📱</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
