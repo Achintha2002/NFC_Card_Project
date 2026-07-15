@@ -196,4 +196,14 @@ export async function moderateAdminVerification(id: string, data: { status: 'APP
   return response.data;
 }
 
+export async function bulkProvisionAdminNfcCard(data: { uid: string; productId?: string; batchNumber?: string }) {
+  const response = await apiClient.post<ApiResponse<{ card: any; alreadyProvisioned: boolean; activationUrl: string }>>('/admin/cards/bulk-provision', data);
+  return response.data;
+}
+
+export async function bulkModerateAdminVerifications(data: { ids: string[]; status: 'APPROVED' | 'REJECTED'; moderationNote?: string }) {
+  const response = await apiClient.patch<ApiResponse<{ count: number }>>('/admin/verifications/bulk-moderate', data);
+  return response.data;
+}
+
 export { apiClient };
