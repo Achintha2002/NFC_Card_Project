@@ -1,17 +1,20 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider } from './AuthContext';
 import { ThemeProvider } from './ThemeContext';
 import { CartProvider } from './CartContext';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "demo-google-client-id.apps.googleusercontent.com";
-  const [mounted, setMounted] = useState(false);
+  const [GoogleOAuthProviderComponent, setGoogleOAuthProviderComponent] = useState<any>(null);
 
   useEffect(() => {
-    setMounted(true);
+    import('@react-oauth/google').then((mod) => {
+      setGoogleOAuthProviderComponent(() => mod.GoogleOAuthProvider);
+    }).catch(() => {
+      // Ignore load error if any
+    });
   }, []);
 
   const content = (
@@ -24,13 +27,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </ThemeProvider>
   );
 
-  if (!mounted) {
+  if (!GoogleOAuthProviderComponent) {
     return content;
   }
 
+  const Provider = GoogleOAuthProviderComponent;
   return (
-    <GoogleOAuthProvider clientId={googleClientId}>
+    <Provider clientId={googleClientId}>
       {content}
-    </GoogleOAuthProvider>
+    </Provider>
   );
 }
