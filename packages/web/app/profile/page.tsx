@@ -60,6 +60,16 @@ export default function ProfilePage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Check URL query parameters for tab initial selection
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "analytics") {
+        setActiveTab("analytics");
+      }
+    }
+  }, []);
+
   // Initialize form when user loads
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

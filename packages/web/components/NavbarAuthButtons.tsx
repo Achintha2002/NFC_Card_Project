@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { User as UserIcon, LogOut, ChevronDown, Sparkles, Sun, Moon } from "lucide-react";
+import { User as UserIcon, LogOut, ChevronDown, Sparkles, Sun, Moon, BarChart3 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
@@ -103,6 +103,25 @@ export function NavbarAuthButtons() {
                   <UserIcon className="w-4 h-4" />
                 </div>
                 <span>User Profile & Account</span>
+              </Link>
+              <Link
+                href="/profile?tab=analytics"
+                onClick={() => setDropdownOpen(false)}
+                className={`flex items-center justify-between px-4 py-2.5 rounded-2xl text-sm font-bold transition-all group ${
+                  isLight ? "hover:bg-amber-500/10 hover:text-amber-700 text-neutral-800" : "hover:bg-amber-500/15 hover:text-amber-300 text-neutral-200"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                    isLight ? "bg-amber-500/10 group-hover:bg-amber-500/20 text-amber-600" : "bg-amber-500/15 group-hover:bg-amber-500/25 text-amber-400"
+                  }`}>
+                    <BarChart3 className="w-4 h-4" />
+                  </div>
+                  <span>Analytics & Insights</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black tracking-normal">
+                  NEW
+                </span>
               </Link>
             </div>
 
