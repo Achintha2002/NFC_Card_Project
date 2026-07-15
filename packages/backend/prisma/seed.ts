@@ -172,6 +172,28 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── Create Super Admin user ─────────────────────────────────
+  const adminPasswordHash = await bcrypt.hash('AdminPassword123!', 12);
+  const adminUser = await prisma.user.create({
+    data: {
+      email: 'admin@tagit.com',
+      passwordHash: adminPasswordHash,
+      role: 'SUPER_ADMIN',
+      subscriptionTier: 'CORPORATE',
+      profiles: {
+        create: [
+          {
+            username: 'tagit_admin',
+            displayName: 'TAGIT Executive Administrator',
+            bio: 'Official System Super Administrator for TAGIT ERP.',
+            isDefault: true,
+          },
+        ],
+      },
+    },
+  });
+  console.log('✅ Super Admin created:', adminUser.email);
+
   console.log('\n🎉 Seed complete! Visit: http://localhost:3000/p/alexmorgan');
 }
 

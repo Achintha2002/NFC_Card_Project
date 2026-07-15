@@ -17,6 +17,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
+import { apiClient, ApiResponse } from '../services/api';
 
 interface LeadItem {
   id: string;
@@ -35,7 +36,6 @@ interface CrmLeadsTabProps {
 
 export function CrmLeadsTab({
   theme = 'light',
-  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000',
 }: CrmLeadsTabProps) {
   const isLight = theme === 'light';
   const [leads, setLeads] = useState<LeadItem[]>([]);
@@ -47,20 +47,13 @@ export function CrmLeadsTab({
     setIsLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('nexus_access_token') || localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/v1/leads/my-profile`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Failed to fetch captured leads.');
+      const res = await apiClient.get<ApiResponse<LeadItem[]>>('/leads/my-profile');
+      if (!res.data || !res.data.success) {
+        throw new Error(res.data?.error || 'Failed to fetch captured leads.');
       }
-      setLeads(json.data || []);
+      setLeads(res.data.data || []);
     } catch (err: any) {
-      setError(err.message || 'Error loading CRM leads.');
+      setError(err.response?.data?.error || err.message || 'Error loading CRM leads.');
     } finally {
       setIsLoading(false);
     }
@@ -73,14 +66,8 @@ export function CrmLeadsTab({
   const handleDeleteLead = async (id: string) => {
     if (!confirm('Are you sure you want to delete this contact lead?')) return;
     try {
-      const token = localStorage.getItem('nexus_access_token') || localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/v1/leads/${id}`, {
-        method: 'DELETE',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      if (res.ok) {
+      const res = await apiClient.delete(`/leads/${id}`);
+      if (res.status === 200 || res.status === 204 || res.data?.success) {
         setLeads((prev) => prev.filter((l) => l.id !== id));
       }
     } catch (err) {
