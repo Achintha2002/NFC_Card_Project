@@ -11,7 +11,7 @@ async function seedAdmin() {
 
   const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail },
-    include: { profile: true },
+    include: { profiles: true },
   });
 
   if (existingAdmin) {
@@ -22,7 +22,7 @@ async function seedAdmin() {
         role: UserRole.SUPER_ADMIN,
         subscriptionTier: SubscriptionTier.CORPORATE,
       },
-      include: { profile: true },
+      include: { profiles: true },
     });
     console.log(`✅ Updated existing Super Admin account: ${updated.email} (${updated.role})`);
   } else {
@@ -33,15 +33,18 @@ async function seedAdmin() {
         role: UserRole.SUPER_ADMIN,
         subscriptionTier: SubscriptionTier.CORPORATE,
         authProvider: 'EMAIL',
-        profile: {
-          create: {
-            username: 'tagit_admin',
-            displayName: 'TAGIT Executive Administrator',
-            bio: 'Official System Super Administrator for TAGIT ERP.',
-          },
+        profiles: {
+          create: [
+            {
+              username: 'tagit_admin',
+              displayName: 'TAGIT Executive Administrator',
+              bio: 'Official System Super Administrator for TAGIT ERP.',
+              isDefault: true,
+            },
+          ],
         },
       },
-      include: { profile: true },
+      include: { profiles: true },
     });
     console.log(`✅ Created new Super Admin account: ${created.email} (${created.role})`);
   }

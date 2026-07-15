@@ -28,10 +28,12 @@ import {
   Sun,
   Moon,
   BarChart3,
+  UserCheck,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/services/api";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
+import { CrmLeadsTab } from "@/components/CrmLeadsTab";
 
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -41,7 +43,7 @@ export default function ProfilePage() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"settings" | "analytics">("settings");
+  const [activeTab, setActiveTab] = useState<"settings" | "analytics" | "leads">("settings");
 
   // Form State
   const [displayName, setDisplayName] = useState("");
@@ -66,6 +68,8 @@ export default function ProfilePage() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("tab") === "analytics") {
         setActiveTab("analytics");
+      } else if (params.get("tab") === "leads") {
+        setActiveTab("leads");
       }
     }
   }, []);
@@ -302,11 +306,30 @@ export default function ProfilePage() {
                 NEW
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("leads")}
+              className={`flex items-center gap-2.5 px-5 py-2.5 rounded-2xl text-xs font-extrabold uppercase tracking-wider transition-all ${
+                activeTab === "leads"
+                  ? "bg-gradient-to-r from-rose-600 to-orange-500 text-white shadow-lg shadow-rose-500/25"
+                  : isLight
+                  ? "bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 shadow-sm"
+                  : "bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white"
+              }`}
+            >
+              <UserCheck className="w-4 h-4 text-cyan-400" />
+              <span>CRM Leads & Contacts</span>
+              <span className="px-2 py-0.5 rounded-full bg-cyan-500 text-white text-[10px] font-black tracking-normal">
+                CRM
+              </span>
+            </button>
           </div>
         </div>
 
         {activeTab === "analytics" ? (
           <AnalyticsDashboard theme={theme} />
+        ) : activeTab === "leads" ? (
+          <CrmLeadsTab theme={theme} apiUrl={apiClient.defaults.baseURL} />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           

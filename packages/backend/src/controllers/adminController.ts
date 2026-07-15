@@ -207,7 +207,7 @@ export async function getNfcCards(req: Request, res: Response): Promise<void> {
       include: {
         product: { select: { name: true, sku: true } },
         batch: { select: { batchNumber: true } },
-        assignedUser: { select: { email: true, profile: { select: { displayName: true, username: true } } } },
+        assignedUser: { select: { email: true, profiles: { select: { displayName: true, username: true } } } },
       },
     });
     sendSuccess(res, cards);
@@ -344,7 +344,7 @@ export async function getOrders(req: Request, res: Response): Promise<void> {
       orderBy: { createdAt: 'desc' },
       include: {
         items: { include: { product: true } },
-        user: { select: { email: true, profile: { select: { displayName: true } } } },
+        user: { select: { email: true, profiles: { select: { displayName: true } } } },
       },
     });
 
@@ -378,7 +378,7 @@ export async function getOrders(req: Request, res: Response): Promise<void> {
           orderBy: { createdAt: 'desc' },
           include: {
             items: { include: { product: true } },
-            user: { select: { email: true, profile: { select: { displayName: true } } } },
+            user: { select: { email: true, profiles: { select: { displayName: true } } } },
           },
         });
       }
@@ -425,30 +425,33 @@ export async function getUsers(req: Request, res: Response): Promise<void> {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
-        profile: true,
+        profiles: true,
         assignedCards: true,
         orders: { select: { id: true, totalAmount: true } },
       },
     });
 
-    const formatted = users.map(u => ({
-      id: u.id,
-      email: u.email,
-      role: u.role,
-      authProvider: u.authProvider,
-      subscriptionTier: u.subscriptionTier,
-      createdAt: u.createdAt,
-      profile: u.profile ? {
-        id: u.profile.id,
-        username: u.profile.username,
-        displayName: u.profile.displayName,
-        status: u.profile.status,
-        tapCount: u.profile.tapCount,
-        profilePicture: u.profile.profilePicture,
-      } : null,
-      totalOrders: u.orders.length,
-      assignedCardsCount: u.assignedCards.length,
-    }));
+    const formatted = users.map(u => {
+      const primaryProfile = u.profiles.find(p => p.isDefault) ?? u.profiles[0] ?? null;
+      return {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+        authProvider: u.authProvider,
+        subscriptionTier: u.subscriptionTier,
+        createdAt: u.createdAt,
+        profile: primaryProfile ? {
+          id: primaryProfile.id,
+          username: primaryProfile.username,
+          displayName: primaryProfile.displayName,
+          status: primaryProfile.status,
+          tapCount: primaryProfile.tapCount,
+          profilePicture: primaryProfile.profilePicture,
+        } : null,
+        totalOrders: u.orders.length,
+        assignedCardsCount: u.assignedCards.length,
+      };
+    });
 
     sendSuccess(res, formatted);
   } catch (error) {
@@ -468,14 +471,17 @@ export async function updateUserRoleTier(req: Request, res: Response): Promise<v
         ...(role && { role: role as UserRole }),
         ...(subscriptionTier && { subscriptionTier: subscriptionTier as SubscriptionTier }),
       },
-      include: { profile: true },
+      include: { profiles: true },
     });
 
-    if (profileStatus && user.profile) {
-      await prisma.profile.update({
-        where: { id: user.profile.id },
-        data: { status: profileStatus },
-      });
+    if (profileStatus && user.profiles.length > 0) {
+      const targetProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0];
+      if (targetProfile) {
+        await prisma.profile.update({
+          where: { id: targetProfile.id },
+          data: { status: profileStatus },
+        });
+      }
     }
 
     sendSuccess(res, user, `User ${user.email} updated successfully.`);
@@ -518,15 +524,18 @@ export async function createAdminUser(req: Request, res: Response): Promise<void
         role: UserRole.ADMIN,
         subscriptionTier: SubscriptionTier.FREE,
         authProvider: 'EMAIL',
-        profile: {
-          create: {
-            username,
-            displayName,
-            status: 'ACTIVE',
-          },
+        profiles: {
+          create: [
+            {
+              username,
+              displayName,
+              status: 'ACTIVE',
+              isDefault: true,
+            },
+          ],
         },
       },
-      include: { profile: true },
+      include: { profiles: true },
     });
 
     sendSuccess(res, newAdmin, 'New admin user created successfully.', 201);
@@ -600,3 +609,133 @@ export async function moderateVerification(req: Request, res: Response): Promise
     sendError(res, 'Failed to moderate verification.', 500);
   }
 }
+
+// ============================================================
+//  7. BULK PROVISIONING & RAPID MODERATION
+// ============================================================
+
+/**
+ * POST /api/v1/admin/nfc/bulk-provision
+ * Automatically provisions an NFC card when read by Web NFC or USB Wedge Scanner.
+ */
+export async function bulkProvisionNfcCards(req: Request, res: Response): Promise<void> {
+  try {
+    const { uid, productId, batchNumber } = req.body;
+
+    if (!uid) {
+      sendError(res, 'Hardware UID (`uid`) read from card is required.', 400);
+      return;
+    }
+
+    // Check if UID is already provisioned
+    const existing = await prisma.nfcCardItem.findUnique({ where: { uid: uid.trim() } });
+    if (existing) {
+      sendSuccess(res, {
+        card: existing,
+        alreadyProvisioned: true,
+        activationUrl: `https://tagit.lk/activate?code=${existing.activationCode}`,
+      }, `Card UID ${uid} is already provisioned as ${existing.serialNumber}.`);
+      return;
+    }
+
+    let batchId: string | undefined;
+    if (batchNumber) {
+      let batch = await prisma.nfcCardBatch.findUnique({ where: { batchNumber } });
+      if (!batch) {
+        batch = await prisma.nfcCardBatch.create({
+          data: { batchNumber, description: 'Created during bulk provisioning studio scan' },
+        });
+      }
+      batchId = batch.id;
+    }
+
+    const timestamp = Date.now().toString().slice(-6);
+    const randPart = Math.floor(100 + Math.random() * 900);
+    const serialNumber = `TG-${timestamp}-${randPart}`;
+
+    const pinPart1 = Math.floor(1000 + Math.random() * 9000);
+    const pinPart2 = Math.floor(1000 + Math.random() * 9000);
+    const activationCode = `${pinPart1}-${pinPart2}`;
+
+    const newCard = await prisma.nfcCardItem.create({
+      data: {
+        uid: uid.trim(),
+        serialNumber,
+        activationCode,
+        status: NfcCardStatus.UNASSIGNED,
+        productId: productId || null,
+        batchId: batchId || null,
+      },
+    });
+
+    sendSuccess(res, {
+      card: newCard,
+      alreadyProvisioned: false,
+      activationUrl: `https://tagit.lk/activate?code=${activationCode}`,
+    }, `Successfully provisioned new NFC Card ${serialNumber}!`, 201);
+  } catch (error) {
+    console.error('bulkProvisionNfcCards error:', error);
+    sendError(res, 'Failed to auto-provision NFC card.', 500);
+  }
+}
+
+/**
+ * PATCH /api/v1/admin/verifications/bulk-moderate
+ * Rapid bulk moderation for Tinder-style swipe UI and grid selection.
+ */
+export async function bulkModerateVerifications(req: Request, res: Response): Promise<void> {
+  try {
+    const { items } = req.body; // Array<{ id: string; action: 'APPROVE' | 'REJECT'; note?: string }>
+
+    if (!Array.isArray(items) || items.length === 0) {
+      sendError(res, 'An array of verification items is required.', 400);
+      return;
+    }
+
+    let approvedCount = 0;
+    let rejectedCount = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        const status: VerificationStatus = item.action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+        const reqRecord = await tx.verificationRequest.findUnique({
+          where: { id: item.id },
+        });
+
+        if (!reqRecord || reqRecord.status !== 'PENDING') continue;
+
+        await tx.verificationRequest.update({
+          where: { id: item.id },
+          data: {
+            status,
+            moderationNote: item.note || `Bulk reviewed (${status})`,
+            reviewedAt: new Date(),
+          },
+        });
+
+        if (status === 'APPROVED') {
+          approvedCount++;
+          const updateData: any = {};
+          if (reqRecord.fieldName === 'displayName') updateData.displayName = reqRecord.newValue;
+          if (reqRecord.fieldName === 'profilePicture') updateData.profilePicture = reqRecord.newValue;
+          if (reqRecord.fieldName === 'companyLogo') updateData.companyLogo = reqRecord.newValue;
+
+          if (Object.keys(updateData).length > 0) {
+            await tx.profile.update({
+              where: { id: reqRecord.profileId },
+              data: updateData,
+            });
+          }
+        } else {
+          rejectedCount++;
+        }
+      }
+    });
+
+    sendSuccess(res, { approvedCount, rejectedCount }, `Successfully moderated ${items.length} verification requests.`);
+  } catch (error) {
+    console.error('bulkModerateVerifications error:', error);
+    sendError(res, 'Failed to process bulk moderation.', 500);
+  }
+}
+

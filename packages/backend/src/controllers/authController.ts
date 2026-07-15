@@ -59,22 +59,27 @@ export async function register(
       data: {
         email,
         passwordHash,
-        profile: {
-          create: {
-            username,
-            displayName,
-          },
+        profiles: {
+          create: [
+            {
+              username,
+              displayName,
+              isDefault: true,
+            },
+          ],
         },
       },
       include: {
-        profile: true,
+        profiles: true,
       },
     });
+
+    const primaryProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0];
 
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile.id,
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -92,7 +97,8 @@ export async function register(
           subscriptionTier: user.subscriptionTier,
           createdAt: user.createdAt,
           authProvider: user.authProvider,
-          profile: user.profile,
+          profile: primaryProfile,
+          profiles: user.profiles,
         },
       },
       'Account created successfully.',
@@ -117,7 +123,7 @@ export async function login(
 
     const user = await prisma.user.findUnique({
       where: { email },
-      include: { profile: true },
+      include: { profiles: true },
     });
 
     if (!user) {
@@ -133,10 +139,12 @@ export async function login(
       throw new AppError('Invalid email or password.', 401);
     }
 
+    const primaryProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0];
+
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile?.id ?? '',
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -152,7 +160,8 @@ export async function login(
         subscriptionTier: user.subscriptionTier,
         createdAt: user.createdAt,
         authProvider: user.authProvider,
-        profile: user.profile,
+        profile: primaryProfile ?? null,
+        profiles: user.profiles,
       },
     });
   } catch (error) {
@@ -180,17 +189,19 @@ export async function refresh(
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      include: { profile: { select: { id: true } } },
+      include: { profiles: { select: { id: true, isDefault: true } } },
     });
 
-    if (!user || !user.profile) {
+    if (!user || user.profiles.length === 0) {
       throw new AppError('User not found.', 404);
     }
+
+    const primaryProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0];
 
     const newAccessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile.id,
+      profileId: primaryProfile.id,
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -222,7 +233,7 @@ export async function me(
         subscriptionTier: true,
         createdAt: true,
         authProvider: true,
-        profile: {
+        profiles: {
           select: {
             id: true,
             username: true,
@@ -237,6 +248,7 @@ export async function me(
             companyLogo: true,
             status: true,
             tapCount: true,
+            isDefault: true,
           },
         },
       },
@@ -246,7 +258,12 @@ export async function me(
       throw new AppError('User not found.', 404);
     }
 
-    sendSuccess(res, user);
+    const primaryProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0] ?? null;
+
+    sendSuccess(res, {
+      ...user,
+      profile: primaryProfile,
+    });
   } catch (error) {
     next(error);
   }
@@ -275,12 +292,11 @@ export async function googleAuth(
         ],
       },
       include: {
-        profile: true,
+        profiles: true,
       },
     });
 
     if (user) {
-      // If found by email but googleId not set, link account
       if (!user.googleId) {
         user = await prisma.user.update({
           where: { id: user.id },
@@ -288,42 +304,46 @@ export async function googleAuth(
             googleId: info.googleId,
             authProvider: user.authProvider === 'EMAIL' ? 'EMAIL_GOOGLE' : user.authProvider,
           },
-          include: { profile: true },
+          include: { profiles: true },
         });
       }
 
-      // Update profile picture if missing and google provided one
-      if (user.profile && !user.profile.profilePicture && info.profilePicture) {
+      const primaryProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0];
+      if (primaryProfile && !primaryProfile.profilePicture && info.profilePicture) {
         await prisma.profile.update({
-          where: { id: user.profile.id },
+          where: { id: primaryProfile.id },
           data: { profilePicture: info.profilePicture },
         });
-        user.profile.profilePicture = info.profilePicture;
+        primaryProfile.profilePicture = info.profilePicture;
       }
     } else {
-      // Create new User + Profile
       const username = await generateUniqueUsername(info.email, info.displayName);
       user = await prisma.user.create({
         data: {
           email: info.email,
           googleId: info.googleId,
           authProvider: 'GOOGLE',
-          profile: {
-            create: {
-              username,
-              displayName: info.displayName,
-              profilePicture: info.profilePicture || null,
-            },
+          profiles: {
+            create: [
+              {
+                username,
+                displayName: info.displayName,
+                profilePicture: info.profilePicture || null,
+                isDefault: true,
+              },
+            ],
           },
         },
-        include: { profile: true },
+        include: { profiles: true },
       });
     }
+
+    const primaryProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0];
 
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile?.id ?? '',
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -339,7 +359,8 @@ export async function googleAuth(
         subscriptionTier: user.subscriptionTier,
         createdAt: user.createdAt,
         authProvider: user.authProvider,
-        profile: user.profile,
+        profile: primaryProfile ?? null,
+        profiles: user.profiles,
       },
     }, 'Signed in with Google successfully.', 200);
   } catch (error) {
@@ -372,7 +393,7 @@ export async function appleAuth(
         ],
       },
       include: {
-        profile: true,
+        profiles: true,
       },
     });
 
@@ -384,7 +405,7 @@ export async function appleAuth(
             appleId: info.appleId,
             authProvider: user.authProvider === 'EMAIL' ? 'EMAIL_APPLE' : user.authProvider,
           },
-          include: { profile: true },
+          include: { profiles: true },
         });
       }
     } else {
@@ -394,21 +415,26 @@ export async function appleAuth(
           email: info.email,
           appleId: info.appleId,
           authProvider: 'APPLE',
-          profile: {
-            create: {
-              username,
-              displayName: info.displayName,
-            },
+          profiles: {
+            create: [
+              {
+                username,
+                displayName: info.displayName,
+                isDefault: true,
+              },
+            ],
           },
         },
-        include: { profile: true },
+        include: { profiles: true },
       });
     }
+
+    const primaryProfile = user.profiles.find(p => p.isDefault) ?? user.profiles[0];
 
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile?.id ?? '',
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -424,7 +450,8 @@ export async function appleAuth(
         subscriptionTier: user.subscriptionTier,
         createdAt: user.createdAt,
         authProvider: user.authProvider,
-        profile: user.profile,
+        profile: primaryProfile ?? null,
+        profiles: user.profiles,
       },
     }, 'Signed in with Apple successfully.', 200);
   } catch (error) {

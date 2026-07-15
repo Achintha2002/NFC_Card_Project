@@ -24,6 +24,7 @@ router.delete('/inventory/:id', adminController.deleteProduct);
 router.get('/cards', adminController.getNfcCards);
 router.post('/cards/batch', adminController.createNfcCardBatch);
 router.post('/cards/assign', adminController.assignNfcCard);
+router.post('/cards/bulk-provision', adminController.bulkProvisionNfcCards);
 
 // 4. E-Commerce Orders & Fulfillment Pipeline
 router.get('/orders', adminController.getOrders);
@@ -36,6 +37,7 @@ router.patch('/users/:id', adminController.updateUserRoleTier);
 
 // 6. Profile Moderation Queue
 router.get('/verifications', adminController.getVerifications);
+router.patch('/verifications/bulk-moderate', adminController.bulkModerateVerifications);
 router.patch('/verifications/:id', adminController.moderateVerification);
 
 export default router;

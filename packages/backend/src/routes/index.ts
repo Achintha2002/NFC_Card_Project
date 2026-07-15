@@ -10,6 +10,7 @@ import { linkRouter } from './linkRoutes';
 import adminRouter from './adminRoutes';
 import designsRouter from './designs.routes';
 import { paymentRouter } from './paymentRoutes';
+import { leadRouter } from './leadRoutes';
 
 export const apiRouter = Router();
 
@@ -30,6 +31,9 @@ apiRouter.use('/designs', designsRouter);
 
 /** Payment & Subscription Gateway endpoints */
 apiRouter.use('/payments', paymentRouter);
+
+/** Lead capture and CRM endpoints */
+apiRouter.use('/leads', leadRouter);
 
 /** API version info */
 apiRouter.get('/', (_req, res) => {

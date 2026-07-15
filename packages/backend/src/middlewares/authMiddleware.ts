@@ -43,7 +43,7 @@ export async function authMiddleware(
         email: true,
         role: true,
         subscriptionTier: true,
-        profile: { select: { id: true } },
+        profiles: { select: { id: true, isDefault: true } },
       },
     });
 
@@ -52,12 +52,16 @@ export async function authMiddleware(
       return;
     }
 
+    const requestedProfileId = (req.headers['x-profile-id'] as string) || req.query?.profileId;
+    const matchedProfile = user.profiles.find(p => p.id === requestedProfileId);
+    const primaryProfileId = matchedProfile?.id || user.profiles.find(p => p.isDefault)?.id || user.profiles[0]?.id || '';
+
     // Attach typed user identity to the request
     req.user = {
       userId: user.id,
       email: user.email,
       role: user.role,
-      profileId: user.profile?.id || '',
+      profileId: primaryProfileId,
       subscriptionTier: user.subscriptionTier,
     };
 
