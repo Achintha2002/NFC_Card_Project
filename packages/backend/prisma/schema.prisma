@@ -85,11 +85,34 @@ enum LinkPlatform {
   PHONE
 }
 
+enum PortfolioTheme {
+  MIDNIGHT_LUXE
+  ARCTIC_FROST
+  SUNSET_EMBER
+  OCEAN_DEPTH
+  MONOCHROME_ELITE
+  PURE_LIGHT
+}
+
+enum PortfolioSectionType {
+  HERO
+  ABOUT
+  EXPERIENCE
+  PROJECTS
+  SKILLS
+  TESTIMONIALS
+  GALLERY
+  CONTACT
+  STATS
+  CUSTOM_HTML
+}
+
 // ============================================================
 //  MODELS
 // ============================================================
 
-/// Core authentication entity. One-to-one with Profile.
+/// Core authentication entity. One-to-many with Profile.
+/// A single user can own multiple profiles (e.g. Personal, Business).
 model User {
   id               String           @id @default(cuid())
   email            String           @unique
@@ -100,8 +123,14 @@ model User {
   role             UserRole         @default(USER)
   subscriptionTier SubscriptionTier @default(FREE)
 
+  // Payment / Subscription (Stripe)
+  stripeCustomerId   String?   @unique // Stripe Customer ID (cus_...)
+  subscriptionId     String?   @unique // Stripe Subscription ID (sub_...)
+  subscriptionStatus String? // active, canceled, past_due, trialing, etc.
+  currentPeriodEnd   DateTime? // When the current billing period ends
+
   // Relations
-  profile       Profile?
+  profiles      Profile[]
   orders        Order[]
   assignedCards NfcCardItem[]
 
@@ -112,7 +141,7 @@ model User {
   @@map("users")
 }
 
-/// Public-facing profile data tied to a single User.
+/// Public-facing profile data tied to a User (one User can have many Profiles).
 /// Contains all information displayed on the NFC tap landing page.
 model Profile {
   id             String        @id @default(cuid())
@@ -128,16 +157,26 @@ model Profile {
   companyLogo    String? // URL to hosted company logo
   status         ProfileStatus @default(ACTIVE)
 
+  /// Profile label for multi-profile context (e.g. "Personal", "Business")
+  label String @default("Default")
+
   /// Total number of times the NFC card has been tapped (profile viewed)
   tapCount Int @default(0)
 
-  // Ownership — 1:1 with User
-  userId String @unique
+  /// Lead Capture Mode — when enabled, a form is shown to scanners to collect their contact info
+  leadCaptureEnabled Boolean @default(false)
+
+  // Ownership — Many:1 with User (1 User : N Profiles)
+  userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Relations
   links                Link[]
   verificationRequests VerificationRequest[]
+  portfolio            Portfolio?
+  tapAnalytics         TapAnalytics[]
+  linkClicks           LinkClickAnalytics[]
+  leads                Lead[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -160,6 +199,9 @@ model Link {
   // Ownership — many:1 with Profile
   profileId String
   profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Analytics
+  clicks LinkClickAnalytics[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -187,6 +229,74 @@ model VerificationRequest {
   reviewedAt  DateTime? // Set when status moves from PENDING to APPROVED/REJECTED
 
   @@map("verification_requests")
+}
+
+// ============================================================
+//  ANALYTICS MODELS
+// ============================================================
+
+/// Records each individual card tap/scan event with contextual metadata.
+/// Provides granular data for user-facing analytics dashboards.
+model TapAnalytics {
+  id         String   @id @default(cuid())
+  profileId  String
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  ipAddress  String? // Hashed/anonymized for privacy
+  userAgent  String?
+  deviceType String   @default("UNKNOWN") // MOBILE, TABLET, DESKTOP, UNKNOWN
+  country    String? // Derived from IP via geo-lookup
+  city       String?
+  referrer   String? // HTTP Referer header
+  tappedAt   DateTime @default(now())
+
+  @@index([profileId])
+  @@index([tappedAt])
+  @@map("tap_analytics")
+}
+
+/// Records each time a specific link on a profile is clicked.
+model LinkClickAnalytics {
+  id         String   @id @default(cuid())
+  linkId     String
+  link       Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  profileId  String
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  deviceType String   @default("UNKNOWN")
+  country    String?
+  clickedAt  DateTime @default(now())
+
+  @@index([profileId])
+  @@index([linkId])
+  @@index([clickedAt])
+  @@map("link_click_analytics")
+}
+
+// ============================================================
+//  LEAD CAPTURE MODEL
+// ============================================================
+
+/// Stores contact information submitted by people who scan a profile's NFC card.
+/// Only created when `Profile.leadCaptureEnabled` is true.
+model Lead {
+  id        String  @id @default(cuid())
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Submitted contact info
+  name    String
+  email   String?
+  phone   String?
+  company String?
+  message String?
+
+  // Context
+  deviceType String   @default("UNKNOWN")
+  country    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([profileId])
+  @@map("leads")
 }
 
 // ============================================================
@@ -244,6 +354,9 @@ model NfcCardItem {
   activationCode String // Secure 8-digit PIN printed under scratch-off (e.g. 8492-1049)
   status         NfcCardStatus @default(UNASSIGNED)
 
+  /// The URL written to the NFC chip (e.g. https://tagit.app/p/username)
+  encodedUrl String?
+
   // Relations
   productId      String?
   product        Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -294,7 +407,7 @@ model Order {
 model CardDesign {
   id            String       @id @default(cuid())
   status        DesignStatus @default(TEMPORARY)
-  
+
   // Configuration
   productName   String
   basePrice     Float
@@ -313,12 +426,12 @@ model CardDesign {
   fontStyle     String
 
   // Relations
-  orderItems    OrderItem[]
+  orderItems OrderItem[]
 
   // Timestamps
-  createdAt     DateTime  @default(now())
-  expiresAt     DateTime? // Used for 3-day cart cleanup
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // Used for 3-day cart cleanup
+  updatedAt DateTime  @updatedAt
 
   @@map("card_designs")
 }
@@ -339,4 +452,66 @@ model OrderItem {
   cardDesign   CardDesign? @relation(fields: [cardDesignId], references: [id], onDelete: SetNull)
 
   @@map("order_items")
+}
+
+// ============================================================
+//  PORTFOLIO MODELS
+// ============================================================
+
+/// Personal portfolio website tied to a premium Profile.
+/// A portfolio is composed of ordered, typed sections.
+model Portfolio {
+  id          String         @id @default(cuid())
+  isPublished Boolean        @default(false)
+  theme       PortfolioTheme @default(MIDNIGHT_LUXE)
+
+  // Customizable brand colors (override theme defaults)
+  primaryColor String @default("#6451fa")
+  accentColor  String @default("#22d3ee")
+
+  // Hero section data (always present, quick-access fields)
+  headline     String? // e.g. "Full-Stack Developer & Designer"
+  subheadline  String? // e.g. "Building digital experiences that matter"
+  ctaText      String? @default("Get in Touch")
+  ctaUrl       String?
+  heroImageUrl String? // Background/cover image URL
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+
+  // Analytics
+  viewCount Int @default(0)
+
+  // Ownership — 1:1 with Profile
+  profileId String  @unique
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Ordered building blocks
+  sections PortfolioSection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("portfolios")
+}
+
+/// A single content block within a Portfolio.
+/// The `content` JSON field shape varies by `type` — see portfolioController for schemas.
+model PortfolioSection {
+  id        String               @id @default(cuid())
+  type      PortfolioSectionType
+  title     String? // Optional section heading
+  sortOrder Int                  @default(0)
+  isVisible Boolean              @default(true)
+  content   Json                 @default("{}") // Type-specific content
+
+  // Ownership
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("portfolio_sections")
 }

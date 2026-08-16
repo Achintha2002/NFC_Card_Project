@@ -196,4 +196,80 @@ export async function moderateAdminVerification(id: string, data: { status: 'APP
   return response.data;
 }
 
+// ── Portfolio API Methods ─────────────────────────────────────
+
+export interface PortfolioUpdateData {
+  theme?: 'MIDNIGHT_LUXE' | 'ARCTIC_FROST' | 'SUNSET_EMBER' | 'OCEAN_DEPTH' | 'MONOCHROME_ELITE' | 'PURE_LIGHT';
+  primaryColor?: string;
+  accentColor?: string;
+  headline?: string | null;
+  subheadline?: string | null;
+  ctaText?: string | null;
+  ctaUrl?: string | null;
+  heroImageUrl?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+}
+
+export interface SectionCreateData {
+  type: 'HERO' | 'ABOUT' | 'EXPERIENCE' | 'PROJECTS' | 'SKILLS' | 'TESTIMONIALS' | 'GALLERY' | 'CONTACT' | 'STATS' | 'CUSTOM_HTML';
+  title?: string;
+  content?: Record<string, unknown>;
+}
+
+export interface SectionUpdateData {
+  title?: string;
+  isVisible?: boolean;
+  content?: Record<string, unknown>;
+}
+
+export async function getMyPortfolio() {
+  const response = await apiClient.get<ApiResponse<any>>('/portfolio/me');
+  return response.data;
+}
+
+export async function createPortfolio() {
+  const response = await apiClient.post<ApiResponse<any>>('/portfolio');
+  return response.data;
+}
+
+export async function updatePortfolio(data: PortfolioUpdateData) {
+  const response = await apiClient.patch<ApiResponse<any>>('/portfolio', data);
+  return response.data;
+}
+
+export async function togglePortfolioPublish() {
+  const response = await apiClient.patch<ApiResponse<any>>('/portfolio/publish');
+  return response.data;
+}
+
+export async function addPortfolioSection(data: SectionCreateData) {
+  const response = await apiClient.post<ApiResponse<any>>('/portfolio/sections', data);
+  return response.data;
+}
+
+export async function updatePortfolioSection(sectionId: string, data: SectionUpdateData) {
+  const response = await apiClient.patch<ApiResponse<any>>(`/portfolio/sections/${sectionId}`, data);
+  return response.data;
+}
+
+export async function deletePortfolioSection(sectionId: string) {
+  const response = await apiClient.delete<ApiResponse<any>>(`/portfolio/sections/${sectionId}`);
+  return response.data;
+}
+
+export async function reorderPortfolioSections(sectionIds: string[]) {
+  const response = await apiClient.patch<ApiResponse<any>>('/portfolio/sections/reorder', { sectionIds });
+  return response.data;
+}
+
+export async function uploadPortfolioImage(file: File) {
+  const formData = new FormData();
+  formData.append('image', file);
+  const response = await apiClient.post<ApiResponse<{ url: string }>>('/portfolio/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+}
+
 export { apiClient };

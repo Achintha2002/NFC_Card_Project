@@ -103,17 +103,16 @@ async function startServer(): Promise<void> {
     // Verify DB connectivity on startup
     await prisma.$connect();
     console.log('✅ Database connected (Supabase / PostgreSQL)');
-
-    app.listen(PORT, () => {
-      console.log(`🚀 TAGIT API running on http://localhost:${PORT}`);
-      console.log(`🌍 Environment: ${NODE_ENV}`);
-      console.log(`📋 Health check: http://localhost:${PORT}/health`);
-    });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    await prisma.$disconnect();
-    process.exit(1);
+    console.warn('⚠️ Could not connect to database on startup:', (error as Error).message);
+    console.warn('⚠️ Server will start, but database operations may fail until DB is accessible.');
   }
+
+  app.listen(PORT, () => {
+    console.log(`🚀 TAGIT API running on http://localhost:${PORT}`);
+    console.log(`🌍 Environment: ${NODE_ENV}`);
+    console.log(`📋 Health check: http://localhost:${PORT}/health`);
+  });
 }
 
 // ── Graceful Shutdown ─────────────────────────────────────────

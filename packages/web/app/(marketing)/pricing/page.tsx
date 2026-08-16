@@ -63,6 +63,7 @@ export default function PricingPage() {
               </div>
             ))}
             {[
+              "Personal Portfolio Website",
               "Custom domain (coming soon)",
               "CRM integrations",
               "Lead capture forms"
@@ -139,6 +140,7 @@ export default function PricingPage() {
           <div className="flex-1 space-y-4 mb-10 relative z-10">
             {[
               "Everything in Standard",
+              "Personal Portfolio Website (worth LKR 15,000+/yr)",
               "Unlimited links",
               "Lead capture forms",
               "Advanced analytics & tap locations",

@@ -207,7 +207,7 @@ export async function getNfcCards(req: Request, res: Response): Promise<void> {
       include: {
         product: { select: { name: true, sku: true } },
         batch: { select: { batchNumber: true } },
-        assignedUser: { select: { email: true, profile: { select: { displayName: true, username: true } } } },
+        assignedUser: { select: { email: true, profiles: { select: { displayName: true, username: true }, take: 1 } } },
       },
     });
     sendSuccess(res, cards);
@@ -344,7 +344,7 @@ export async function getOrders(req: Request, res: Response): Promise<void> {
       orderBy: { createdAt: 'desc' },
       include: {
         items: { include: { product: true } },
-        user: { select: { email: true, profile: { select: { displayName: true } } } },
+        user: { select: { email: true, profiles: { select: { displayName: true }, take: 1 } } },
       },
     });
 
@@ -378,7 +378,7 @@ export async function getOrders(req: Request, res: Response): Promise<void> {
           orderBy: { createdAt: 'desc' },
           include: {
             items: { include: { product: true } },
-            user: { select: { email: true, profile: { select: { displayName: true } } } },
+            user: { select: { email: true, profiles: { select: { displayName: true }, take: 1 } } },
           },
         });
       }
@@ -425,7 +425,7 @@ export async function getUsers(req: Request, res: Response): Promise<void> {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
-        profile: true,
+        profiles: true,
         assignedCards: true,
         orders: { select: { id: true, totalAmount: true } },
       },
@@ -437,15 +437,18 @@ export async function getUsers(req: Request, res: Response): Promise<void> {
       role: u.role,
       authProvider: u.authProvider,
       subscriptionTier: u.subscriptionTier,
+      subscriptionStatus: u.subscriptionStatus,
       createdAt: u.createdAt,
-      profile: u.profile ? {
-        id: u.profile.id,
-        username: u.profile.username,
-        displayName: u.profile.displayName,
-        status: u.profile.status,
-        tapCount: u.profile.tapCount,
-        profilePicture: u.profile.profilePicture,
+      // Show the first/primary profile for CRM view
+      profile: u.profiles[0] ? {
+        id: u.profiles[0].id,
+        username: u.profiles[0].username,
+        displayName: u.profiles[0].displayName,
+        status: u.profiles[0].status,
+        tapCount: u.profiles[0].tapCount,
+        profilePicture: u.profiles[0].profilePicture,
       } : null,
+      profilesCount: u.profiles.length,
       totalOrders: u.orders.length,
       assignedCardsCount: u.assignedCards.length,
     }));
@@ -468,12 +471,13 @@ export async function updateUserRoleTier(req: Request, res: Response): Promise<v
         ...(role && { role: role as UserRole }),
         ...(subscriptionTier && { subscriptionTier: subscriptionTier as SubscriptionTier }),
       },
-      include: { profile: true },
+      include: { profiles: true },
     });
 
-    if (profileStatus && user.profile) {
+    if (profileStatus && user.profiles.length > 0) {
+      // Apply status to the primary (first) profile
       await prisma.profile.update({
-        where: { id: user.profile.id },
+        where: { id: user.profiles[0].id },
         data: { status: profileStatus },
       });
     }
@@ -518,7 +522,7 @@ export async function createAdminUser(req: Request, res: Response): Promise<void
         role: UserRole.ADMIN,
         subscriptionTier: SubscriptionTier.FREE,
         authProvider: 'EMAIL',
-        profile: {
+        profiles: {
           create: {
             username,
             displayName,
@@ -526,13 +530,70 @@ export async function createAdminUser(req: Request, res: Response): Promise<void
           },
         },
       },
-      include: { profile: true },
+      include: { profiles: true },
     });
 
     sendSuccess(res, newAdmin, 'New admin user created successfully.', 201);
   } catch (error) {
     console.error('createAdminUser error:', error);
     sendError(res, 'Failed to create new admin user.', 500);
+  }
+}
+
+// ============================================================
+//  3b. SINGLE CARD PROVISIONING (NFC Reader / Mobile Tool)
+// ============================================================
+
+/**
+ * POST /api/v1/admin/cards/provision
+ * Admin-only. Provisions a single NFC card by UID (as read from an NFC reader/phone).
+ * Auto-generates a serial number and activation PIN.
+ * Optionally writes the encoded URL for the card.
+ */
+export async function provisionSingleCard(req: Request, res: Response): Promise<void> {
+  try {
+    const { uid, productId, batchId, encodedUrl } = req.body;
+
+    if (!uid) {
+      sendError(res, 'NFC chip UID is required.', 400);
+      return;
+    }
+
+    // Check if UID already exists
+    const existing = await prisma.nfcCardItem.findUnique({ where: { uid } });
+    if (existing) {
+      sendError(res, `Card with UID ${uid} already exists in the database.`, 409);
+      return;
+    }
+
+    // Auto-generate serial number and activation PIN
+    const timestamp = Date.now().toString().slice(-6);
+    const serialNumber = `TG-${timestamp}-${Math.floor(100 + Math.random() * 900)}`;
+    const pinPart1 = Math.floor(1000 + Math.random() * 9000);
+    const pinPart2 = Math.floor(1000 + Math.random() * 9000);
+    const activationCode = `${pinPart1}-${pinPart2}`;
+
+    const card = await prisma.nfcCardItem.create({
+      data: {
+        uid,
+        serialNumber,
+        activationCode,
+        status: NfcCardStatus.UNASSIGNED,
+        productId: productId ?? undefined,
+        batchId: batchId ?? undefined,
+        encodedUrl: encodedUrl ?? undefined,
+      },
+    });
+
+    sendSuccess(
+      res,
+      { card, activationCode },
+      `Card ${serialNumber} provisioned successfully. PIN: ${activationCode}`,
+      201,
+    );
+  } catch (error) {
+    console.error('provisionSingleCard error:', error);
+    sendError(res, 'Failed to provision card.', 500);
   }
 }
 

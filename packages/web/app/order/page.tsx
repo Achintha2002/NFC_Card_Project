@@ -38,7 +38,7 @@ const PAYMENT_METHODS = [
 
 function MiniCardPreview({ config }: { config: CardConfig }) {
   const isPVC = config.productName?.toLowerCase().includes("pvc");
-  const cardStyle = isPVC 
+  const cardStyle = isPVC
     ? { backgroundColor: config.bgColor || "#f8f9fa" }
     : { background: "linear-gradient(135deg, #232427 0%, #1a1b1d 40%, #0e0f10 100%)" };
 
@@ -101,7 +101,7 @@ function OrderPageContent() {
       try {
         const res = await fetch(`http://localhost:4000/api/v1/designs/${id}`);
         const data = await res.json();
-        
+
         if (data.success && data.design) {
           const parsed = data.design as CardConfig;
           setConfig(parsed);

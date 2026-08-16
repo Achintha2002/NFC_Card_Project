@@ -1,14 +1,18 @@
 // ============================================================
-//  NEXUS — Public Profile Page (Server Component)
+//  TAGIT — Public Profile / Portfolio Page (Server Component)
 //  Route: /p/[username]
-//  Fetches profile data server-side for optimal SEO and performance.
-//  Passes data to the ProfileCard client component for interactivity.
+//
+//  Decision logic:
+//   1. Fetch profile data from the backend
+//   2. If the profile has a published portfolio → render PortfolioView
+//   3. Otherwise → render the classic ProfileCard (backward compatible)
 // ============================================================
 
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ProfileCard } from './ProfileCard';
 import { StealthPlaceholder } from './StealthPlaceholder';
+import PortfolioView from './PortfolioView';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -46,16 +50,50 @@ interface ProfileApiResponse {
   message?: string;
 }
 
+/** Shape returned by GET /api/v1/portfolio/:username */
+interface PortfolioApiResponse {
+  success: boolean;
+  data?: {
+    portfolio: {
+      id: string;
+      theme: 'MIDNIGHT_LUXE' | 'ARCTIC_FROST' | 'SUNSET_EMBER' | 'OCEAN_DEPTH' | 'MONOCHROME_ELITE' | 'PURE_LIGHT';
+      primaryColor: string;
+      accentColor: string;
+      headline?: string | null;
+      subheadline?: string | null;
+      ctaText?: string | null;
+      ctaUrl?: string | null;
+      heroImageUrl?: string | null;
+      sections: Array<{
+        id: string;
+        type: string;
+        title?: string | null;
+        sortOrder: number;
+        isVisible: boolean;
+        content: Record<string, unknown>;
+      }>;
+    };
+    profile: {
+      displayName: string;
+      jobTitle?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      profilePicture?: string | null;
+    };
+  };
+  error?: string;
+}
+
 /**
  * Fetches the public profile from the backend API.
- * Uses Next.js cache with a 60-second revalidation window.
- * Falls back to null on network errors (handled gracefully in render).
  */
-async function fetchProfile(username: string): Promise<ProfileApiResponse['data'] | null | 'stealth' | 'suspended'> {
+async function fetchProfile(
+  username: string,
+): Promise<ProfileApiResponse['data'] | null | 'stealth' | 'suspended'> {
   try {
     const res = await fetch(`${API_URL}/api/v1/profile/${encodeURIComponent(username)}`, {
       next: {
-        revalidate: 60, // Revalidate ISR every 60 seconds
+        revalidate: 60,
         tags: [`profile-${username}`],
       },
     });
@@ -64,16 +102,34 @@ async function fetchProfile(username: string): Promise<ProfileApiResponse['data'
     if (res.status === 403) return 'suspended';
 
     const json: ProfileApiResponse = await res.json();
-
     if (!json.success) return null;
-
-    // Stealth response: data.status = "STEALTH"
     if (json.data?.status === 'STEALTH') return 'stealth';
     if (json.data?.status === 'SUSPENDED') return 'suspended';
 
     return json.data ?? null;
   } catch {
-    // Network error or backend down — return null for graceful failure
+    return null;
+  }
+}
+
+/**
+ * Attempts to fetch a published portfolio for the given username.
+ * Returns null if the portfolio doesn't exist or isn't published.
+ */
+async function fetchPortfolio(username: string): Promise<PortfolioApiResponse['data'] | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/portfolio/${encodeURIComponent(username)}`, {
+      next: {
+        revalidate: 30, // Portfolio can change; revalidate more often
+        tags: [`portfolio-${username}`],
+      },
+    });
+
+    if (!res.ok) return null;
+
+    const json: PortfolioApiResponse = await res.json();
+    return json.success ? (json.data ?? null) : null;
+  } catch {
     return null;
   }
 }
@@ -81,7 +137,11 @@ async function fetchProfile(username: string): Promise<ProfileApiResponse['data'
 // ── Dynamic Metadata ──────────────────────────────────────────
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const profile = await fetchProfile(params.username);
+  const { username } = await Promise.resolve(params);
+  const [profile, portfolioData] = await Promise.all([
+    fetchProfile(username),
+    fetchPortfolio(username),
+  ]);
 
   if (!profile || profile === 'stealth' || profile === 'suspended') {
     return {
@@ -90,6 +150,30 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
+  if (portfolioData) {
+    const { portfolio, profile: meta } = portfolioData;
+    const title = `${meta.displayName}${meta.jobTitle ? ` — ${meta.jobTitle}` : ''} | Portfolio`;
+    const description =
+      portfolio.subheadline ??
+      `Explore ${meta.displayName}'s professional portfolio — powered by TAGIT Executive NFC.`;
+
+    return {
+      title,
+      description,
+      openGraph: {
+        type: 'profile',
+        title,
+        description,
+        images: meta.profilePicture
+          ? [{ url: meta.profilePicture, width: 400, height: 400, alt: meta.displayName }]
+          : [],
+      },
+      twitter: { card: 'summary_large_image', title, description },
+      robots: 'index, follow',
+    };
+  }
+
+  // Standard card metadata
   const title = `${profile.displayName} — TAGIT Digital Card`;
   const description = profile.bio
     ? `${profile.bio.substring(0, 150)}${profile.bio.length > 150 ? '...' : ''}`
@@ -106,13 +190,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         ? [{ url: profile.profilePicture, width: 400, height: 400, alt: profile.displayName }]
         : [],
     },
-    twitter: {
-      card: 'summary',
-      title,
-      description,
-      images: profile.profilePicture ? [profile.profilePicture] : [],
-    },
-    // Allow profile pages to be indexed for personal branding SEO
+    twitter: { card: 'summary', title, description, images: profile.profilePicture ? [profile.profilePicture] : [] },
     robots: 'index, follow',
   };
 }
@@ -120,29 +198,40 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 // ── Page Component ────────────────────────────────────────────
 
 export default async function ProfilePage({ params }: PageProps) {
-  const { username } = params;
-  const profile = await fetchProfile(username);
+  const { username } = await Promise.resolve(params);
+
+  // Parallel fetch — profile + portfolio check
+  const [profile, portfolioData] = await Promise.all([
+    fetchProfile(username),
+    fetchPortfolio(username),
+  ]);
 
   // Hard 404
   if (profile === null) {
     notFound();
   }
 
-  // STEALTH — show placeholder, don't 404 (privacy is intentional)
+  // STEALTH — show placeholder
   if (profile === 'stealth') {
     return <StealthPlaceholder isSuspended={false} />;
   }
 
-  // SUSPENDED — show placeholder with suspended messaging
+  // SUSPENDED
   if (profile === 'suspended') {
     return <StealthPlaceholder isSuspended={true} />;
   }
 
-  // ACTIVE — render full glassmorphism card
-  return (
-    <ProfileCard
-      profile={profile as any}
-      apiUrl={API_URL}
-    />
-  );
+  // ✨ EXECUTIVE PORTFOLIO — render full portfolio experience
+  if (portfolioData) {
+    return (
+      <PortfolioView
+        portfolio={portfolioData.portfolio}
+        profile={portfolioData.profile}
+        username={username}
+      />
+    );
+  }
+
+  // STANDARD CARD — render classic glassmorphism card (backward compatible)
+  return <ProfileCard profile={profile as any} apiUrl={API_URL} />;
 }

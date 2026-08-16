@@ -43,7 +43,11 @@ export async function authMiddleware(
         email: true,
         role: true,
         subscriptionTier: true,
-        profile: { select: { id: true } },
+        // Fetch all profiles — pick the first ACTIVE one, fall back to first
+        profiles: {
+          select: { id: true, status: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
@@ -52,12 +56,16 @@ export async function authMiddleware(
       return;
     }
 
+    // Pick primary profile: first ACTIVE profile, else first profile overall
+    const primaryProfile =
+      user.profiles.find((p) => p.status === 'ACTIVE') ?? user.profiles[0];
+
     // Attach typed user identity to the request
     req.user = {
       userId: user.id,
       email: user.email,
       role: user.role,
-      profileId: user.profile?.id || '',
+      profileId: primaryProfile?.id || '',
       subscriptionTier: user.subscriptionTier,
     };
 

@@ -74,6 +74,17 @@ export async function getPublicProfile(
     }
 
     // Increment tap count asynchronously (fire-and-forget to avoid blocking)
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+      ?? req.socket.remoteAddress
+      ?? undefined;
+    const userAgent = req.headers['user-agent'] ?? '';
+    const referrer = req.headers['referer'] ?? req.headers['referrer'] ?? undefined;
+    const deviceType = /mobile|android|iphone|ipad/i.test(userAgent)
+      ? 'MOBILE'
+      : /tablet|ipad/i.test(userAgent)
+        ? 'TABLET'
+        : 'DESKTOP';
+
     prisma.profile
       .update({
         where: { id: profile.id },
@@ -81,6 +92,21 @@ export async function getPublicProfile(
       })
       .catch((err: Error) =>
         console.warn('⚠️ Failed to increment tap count:', err.message),
+      );
+
+    // Record detailed analytics row
+    prisma.tapAnalytics
+      .create({
+        data: {
+          profileId: profile.id,
+          ipAddress,
+          userAgent,
+          deviceType,
+          referrer: referrer as string | undefined,
+        },
+      })
+      .catch((err: Error) =>
+        console.warn('⚠️ Failed to record tap analytics:', err.message),
       );
 
     // Strip sensitive fields before sending public response

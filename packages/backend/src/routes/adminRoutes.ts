@@ -25,6 +25,9 @@ router.get('/cards', adminController.getNfcCards);
 router.post('/cards/batch', adminController.createNfcCardBatch);
 router.post('/cards/assign', adminController.assignNfcCard);
 
+// 3b. Single card provisioning via NFC reader (UID-based)
+router.post('/cards/provision', adminController.provisionSingleCard);
+
 // 4. E-Commerce Orders & Fulfillment Pipeline
 router.get('/orders', adminController.getOrders);
 router.patch('/orders/:id', adminController.updateOrderStatus);

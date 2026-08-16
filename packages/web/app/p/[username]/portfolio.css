@@ -1,0 +1,357 @@
+/* ============================================================
+   TAGIT — Portfolio View Themes & Animations
+   "Wow-Factor" Edition (Framer Motion Integration)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ── Reset & Base ─────────────────────────────────────────── */
+.portfolio-root {
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background-color: var(--portfolio-bg);
+  color: var(--portfolio-text);
+  container-type: inline-size;
+}
+
+/* ── Theme: MIDNIGHT_LUXE ────────────────────────────────── */
+.portfolio-root[data-theme="MIDNIGHT_LUXE"] {
+  --portfolio-bg: #030305;
+  --portfolio-surface: rgba(255, 255, 255, 0.02);
+  --portfolio-surface-hover: rgba(255, 255, 255, 0.04);
+  --portfolio-border: rgba(255, 255, 255, 0.05);
+  --portfolio-text: #ffffff;
+  --portfolio-text-muted: rgba(255, 255, 255, 0.5);
+  --portfolio-accent: #6451fa;
+  --portfolio-accent2: #22d3ee;
+  --portfolio-glow: rgba(100, 81, 250, 0.15);
+  --portfolio-ambient-1: rgba(100, 81, 250, 0.12);
+  --portfolio-ambient-2: rgba(34, 211, 238, 0.08);
+}
+
+/* ── Theme: ARCTIC_FROST ─────────────────────────────────── */
+.portfolio-root[data-theme="ARCTIC_FROST"] {
+  --portfolio-bg: #f8fafc;
+  --portfolio-surface: rgba(255, 255, 255, 0.6);
+  --portfolio-surface-hover: rgba(255, 255, 255, 0.9);
+  --portfolio-border: rgba(0, 0, 0, 0.04);
+  --portfolio-text: #0f172a;
+  --portfolio-text-muted: rgba(15, 23, 42, 0.55);
+  --portfolio-accent: #3b82f6;
+  --portfolio-accent2: #8b5cf6;
+  --portfolio-glow: rgba(59, 130, 246, 0.15);
+  --portfolio-ambient-1: rgba(59, 130, 246, 0.1);
+  --portfolio-ambient-2: rgba(139, 92, 246, 0.08);
+}
+
+/* ── Theme: SUNSET_EMBER ─────────────────────────────────── */
+.portfolio-root[data-theme="SUNSET_EMBER"] {
+  --portfolio-bg: #0f0a06;
+  --portfolio-surface: rgba(255, 180, 50, 0.03);
+  --portfolio-surface-hover: rgba(255, 180, 50, 0.06);
+  --portfolio-border: rgba(255, 140, 30, 0.08);
+  --portfolio-text: #fff6ed;
+  --portfolio-text-muted: rgba(255, 246, 237, 0.6);
+  --portfolio-accent: #f97316;
+  --portfolio-accent2: #e11d48;
+  --portfolio-glow: rgba(249, 115, 22, 0.15);
+  --portfolio-ambient-1: rgba(249, 115, 22, 0.1);
+  --portfolio-ambient-2: rgba(225, 29, 72, 0.1);
+}
+
+/* ── Theme: OCEAN_DEPTH ──────────────────────────────────── */
+.portfolio-root[data-theme="OCEAN_DEPTH"] {
+  --portfolio-bg: #020813;
+  --portfolio-surface: rgba(0, 200, 255, 0.02);
+  --portfolio-surface-hover: rgba(0, 200, 255, 0.05);
+  --portfolio-border: rgba(0, 200, 255, 0.08);
+  --portfolio-text: #f0fbff;
+  --portfolio-text-muted: rgba(240, 251, 255, 0.5);
+  --portfolio-accent: #06b6d4;
+  --portfolio-accent2: #10b981;
+  --portfolio-glow: rgba(6, 182, 212, 0.15);
+  --portfolio-ambient-1: rgba(6, 182, 212, 0.1);
+  --portfolio-ambient-2: rgba(16, 185, 129, 0.08);
+}
+
+/* ── Theme: MONOCHROME_ELITE ─────────────────────────────── */
+.portfolio-root[data-theme="MONOCHROME_ELITE"] {
+  --portfolio-bg: #000000;
+  --portfolio-surface: rgba(255, 255, 255, 0.03);
+  --portfolio-surface-hover: rgba(255, 255, 255, 0.06);
+  --portfolio-border: rgba(255, 255, 255, 0.1);
+  --portfolio-text: #ffffff;
+  --portfolio-text-muted: rgba(255, 255, 255, 0.5);
+  --portfolio-accent: #ffffff;
+  --portfolio-accent2: #888888;
+  --portfolio-glow: rgba(255, 255, 255, 0.1);
+  --portfolio-ambient-1: rgba(255, 255, 255, 0.05);
+  --portfolio-ambient-2: rgba(150, 150, 150, 0.05);
+}
+
+/* ── Theme: PURE_LIGHT ───────────────────────────────────── */
+.portfolio-root[data-theme="PURE_LIGHT"] {
+  --portfolio-bg: #ffffff;
+  --portfolio-surface: rgba(0, 0, 0, 0.03);
+  --portfolio-surface-hover: rgba(0, 0, 0, 0.06);
+  --portfolio-border: rgba(0, 0, 0, 0.08);
+  --portfolio-text: #000000;
+  --portfolio-text-muted: rgba(0, 0, 0, 0.55);
+  --portfolio-accent: #000000;
+  --portfolio-accent2: #444444;
+  --portfolio-glow: rgba(0, 0, 0, 0.1);
+  --portfolio-ambient-1: rgba(0, 0, 0, 0.03);
+  --portfolio-ambient-2: rgba(50, 50, 50, 0.03);
+}
+
+/* ── Ambient Background Orbs ─────────────────────────────── */
+.portfolio-ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.portfolio-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  animation: float 20s ease-in-out infinite alternate;
+}
+
+.portfolio-orb-1 {
+  width: 60cqi;
+  height: 60cqi;
+  top: -20%;
+  left: -10%;
+  background: var(--portfolio-ambient-1);
+}
+
+.portfolio-orb-2 {
+  width: 50cqi;
+  height: 50cqi;
+  bottom: -10%;
+  right: -10%;
+  background: var(--portfolio-ambient-2);
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(5%, 10%) scale(1.1);
+  }
+
+  100% {
+    transform: translate(-5%, -5%) scale(0.9);
+  }
+}
+
+/* ── Layout & Typography ──────────────────────────────────── */
+.portfolio-content-wrapper {
+  position: relative;
+  z-index: 10;
+  padding-bottom: 120px;
+}
+
+.portfolio-section {
+  padding: 100px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@container (max-width: 768px) {
+  .portfolio-section {
+    padding: 72px 20px;
+  }
+}
+
+.portfolio-section-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(2.5rem, 10cqi, 4rem);
+  font-weight: 800;
+  color: var(--portfolio-text);
+  margin-bottom: 24px;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.portfolio-section-title span {
+  background: linear-gradient(110deg, var(--portfolio-accent), var(--portfolio-accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.portfolio-section-subtitle {
+  font-size: clamp(1rem, 3cqi, 1.1rem);
+  color: var(--portfolio-text-muted);
+  max-width: 600px;
+  margin-bottom: 48px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+/* Premium Glass Card */
+.premium-glass-card {
+  background: var(--portfolio-surface);
+  border: 1px solid var(--portfolio-border);
+  border-radius: 24px;
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── TAGIT Watermark ─────────────────────────────────────── */
+.tagit-watermark {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--portfolio-surface);
+  border: 1px solid var(--portfolio-border);
+  border-radius: 100px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  text-decoration: none;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--portfolio-text-muted);
+  transition: all 0.3s ease;
+  opacity: 0.7;
+}
+
+.tagit-watermark:hover {
+  opacity: 1;
+  color: var(--portfolio-text);
+  background: var(--portfolio-surface-hover);
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 8px 24px var(--portfolio-glow);
+}
+
+.tagit-watermark-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Hero Section Custom Styles */
+.portfolio-hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 50px 24px 60px;
+}
+
+.hero-avatar-wrapper {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto 32px;
+}
+
+.hero-avatar-glow {
+  position: absolute;
+  inset: -20px;
+  background: linear-gradient(135deg, var(--portfolio-accent), var(--portfolio-accent2));
+  filter: blur(40px);
+  opacity: 0.5;
+  border-radius: 50%;
+  animation: pulse-glow 4s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-glow {
+  0% {
+    opacity: 0.3;
+    transform: scale(0.9);
+  }
+
+  100% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.hero-avatar-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--portfolio-border);
+  background: var(--portfolio-surface);
+  z-index: 2;
+}
+
+.hero-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Progress Bar (Skills) */
+.skill-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--portfolio-surface);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.skill-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--portfolio-accent), var(--portfolio-accent2));
+  border-radius: 10px;
+}
+
+/* Timeline (Experience) */
+.timeline-container {
+  position: relative;
+  padding-left: 32px;
+}
+
+.timeline-line-track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--portfolio-surface);
+}
+
+.timeline-line-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--portfolio-accent), var(--portfolio-accent2));
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -32px;
+  top: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--portfolio-bg);
+  border: 2px solid var(--portfolio-accent);
+  box-shadow: 0 0 12px var(--portfolio-glow);
+  z-index: 2;
+}

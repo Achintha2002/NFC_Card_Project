@@ -59,7 +59,7 @@ export async function register(
       data: {
         email,
         passwordHash,
-        profile: {
+        profiles: {
           create: {
             username,
             displayName,
@@ -67,14 +67,16 @@ export async function register(
         },
       },
       include: {
-        profile: true,
+        profiles: { orderBy: { createdAt: 'asc' } },
       },
     });
+
+    const primaryProfile = user.profiles[0];
 
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile!.id,
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -92,7 +94,7 @@ export async function register(
           subscriptionTier: user.subscriptionTier,
           createdAt: user.createdAt,
           authProvider: user.authProvider,
-          profile: user.profile,
+          profile: primaryProfile,
         },
       },
       'Account created successfully.',
@@ -117,7 +119,7 @@ export async function login(
 
     const user = await prisma.user.findUnique({
       where: { email },
-      include: { profile: true },
+      include: { profiles: { orderBy: { createdAt: 'asc' } } },
     });
 
     if (!user) {
@@ -133,10 +135,12 @@ export async function login(
       throw new AppError('Invalid email or password.', 401);
     }
 
+    const primaryProfile = user.profiles.find(p => p.status === 'ACTIVE') ?? user.profiles[0];
+
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile!.id,
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -152,7 +156,7 @@ export async function login(
         subscriptionTier: user.subscriptionTier,
         createdAt: user.createdAt,
         authProvider: user.authProvider,
-        profile: user.profile,
+        profile: primaryProfile,
       },
     });
   } catch (error) {
@@ -180,17 +184,19 @@ export async function refresh(
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      include: { profile: { select: { id: true } } },
+      include: { profiles: { select: { id: true, status: true }, orderBy: { createdAt: 'asc' } } },
     });
 
-    if (!user || !user.profile) {
+    if (!user || user.profiles.length === 0) {
       throw new AppError('User not found.', 404);
     }
+
+    const primaryProfile = user.profiles.find(p => p.status === 'ACTIVE') ?? user.profiles[0];
 
     const newAccessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile.id,
+      profileId: primaryProfile.id,
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -220,9 +226,11 @@ export async function me(
         email: true,
         role: true,
         subscriptionTier: true,
+        subscriptionStatus: true,
+        currentPeriodEnd: true,
         createdAt: true,
         authProvider: true,
-        profile: {
+        profiles: {
           select: {
             id: true,
             username: true,
@@ -237,7 +245,10 @@ export async function me(
             companyLogo: true,
             status: true,
             tapCount: true,
+            label: true,
+            leadCaptureEnabled: true,
           },
+          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -246,7 +257,9 @@ export async function me(
       throw new AppError('User not found.', 404);
     }
 
-    sendSuccess(res, user);
+    // Return user with primary profile + all profiles
+    const primaryProfile = user.profiles.find(p => p.status === 'ACTIVE') ?? user.profiles[0];
+    sendSuccess(res, { ...user, profile: primaryProfile });
   } catch (error) {
     next(error);
   }
@@ -275,7 +288,7 @@ export async function googleAuth(
         ],
       },
       include: {
-        profile: true,
+        profiles: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -288,17 +301,18 @@ export async function googleAuth(
             googleId: info.googleId,
             authProvider: user.authProvider === 'EMAIL' ? 'EMAIL_GOOGLE' : user.authProvider,
           },
-          include: { profile: true },
+          include: { profiles: { orderBy: { createdAt: 'asc' } } },
         });
       }
 
       // Update profile picture if missing and google provided one
-      if (user.profile && !user.profile.profilePicture && info.profilePicture) {
+      const primaryProfile = user.profiles.find(p => p.status === 'ACTIVE') ?? user.profiles[0];
+      if (primaryProfile && !primaryProfile.profilePicture && info.profilePicture) {
         await prisma.profile.update({
-          where: { id: user.profile.id },
+          where: { id: primaryProfile.id },
           data: { profilePicture: info.profilePicture },
         });
-        user.profile.profilePicture = info.profilePicture;
+        primaryProfile.profilePicture = info.profilePicture;
       }
     } else {
       // Create new User + Profile
@@ -308,7 +322,7 @@ export async function googleAuth(
           email: info.email,
           googleId: info.googleId,
           authProvider: 'GOOGLE',
-          profile: {
+          profiles: {
             create: {
               username,
               displayName: info.displayName,
@@ -316,14 +330,16 @@ export async function googleAuth(
             },
           },
         },
-        include: { profile: true },
+        include: { profiles: { orderBy: { createdAt: 'asc' } } },
       });
     }
+
+    const primaryProfile = user.profiles.find(p => p.status === 'ACTIVE') ?? user.profiles[0];
 
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile!.id,
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -339,7 +355,7 @@ export async function googleAuth(
         subscriptionTier: user.subscriptionTier,
         createdAt: user.createdAt,
         authProvider: user.authProvider,
-        profile: user.profile,
+        profile: primaryProfile,
       },
     }, 'Signed in with Google successfully.', 200);
   } catch (error) {
@@ -372,7 +388,7 @@ export async function appleAuth(
         ],
       },
       include: {
-        profile: true,
+        profiles: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -384,7 +400,7 @@ export async function appleAuth(
             appleId: info.appleId,
             authProvider: user.authProvider === 'EMAIL' ? 'EMAIL_APPLE' : user.authProvider,
           },
-          include: { profile: true },
+          include: { profiles: { orderBy: { createdAt: 'asc' } } },
         });
       }
     } else {
@@ -394,21 +410,23 @@ export async function appleAuth(
           email: info.email,
           appleId: info.appleId,
           authProvider: 'APPLE',
-          profile: {
+          profiles: {
             create: {
               username,
               displayName: info.displayName,
             },
           },
         },
-        include: { profile: true },
+        include: { profiles: { orderBy: { createdAt: 'asc' } } },
       });
     }
+
+    const primaryProfile = user.profiles.find(p => p.status === 'ACTIVE') ?? user.profiles[0];
 
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
-      profileId: user.profile!.id,
+      profileId: primaryProfile!.id,
       subscriptionTier: user.subscriptionTier,
       role: user.role,
     });
@@ -424,7 +442,7 @@ export async function appleAuth(
         subscriptionTier: user.subscriptionTier,
         createdAt: user.createdAt,
         authProvider: user.authProvider,
-        profile: user.profile,
+        profile: primaryProfile,
       },
     }, 'Signed in with Apple successfully.', 200);
   } catch (error) {

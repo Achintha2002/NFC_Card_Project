@@ -104,6 +104,29 @@ export function NavbarAuthButtons() {
                 </div>
                 <span>User Profile & Account</span>
               </Link>
+
+              {/* Portfolio — Premium/Corporate only */}
+              {(user.subscriptionTier === 'PREMIUM' || user.subscriptionTier === 'CORPORATE') && (
+                <Link
+                  href="/portfolio"
+                  onClick={() => setDropdownOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-bold transition-all group ${
+                    isLight ? "hover:bg-purple-50/80 hover:text-purple-700 text-neutral-800" : "hover:bg-purple-500/15 hover:text-purple-300 text-neutral-200"
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                    isLight ? "bg-purple-50 group-hover:bg-purple-500/10 text-purple-500" : "bg-purple-500/15 group-hover:bg-purple-500/25 text-purple-400"
+                  }`}>
+                    <span className="text-sm">⚡</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span>My Portfolio</span>
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-gradient-to-r from-purple-600 to-cyan-500 text-white">
+                      EXEC
+                    </span>
+                  </div>
+                </Link>
+              )}
             </div>
 
             <div className={`border-t pt-1 mt-1 ${isLight ? "border-neutral-100" : "border-white/10"}`}>

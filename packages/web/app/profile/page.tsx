@@ -411,6 +411,29 @@ export default function ProfilePage() {
 
               {/* Quick Actions */}
               <div className="mt-6 pt-4 flex flex-col gap-2.5">
+                {/* Portfolio CTA */}
+                {(user.subscriptionTier === 'PREMIUM' || user.subscriptionTier === 'CORPORATE') ? (
+                  <Link
+                    href="/portfolio"
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 active:scale-95"
+                  >
+                    <Sparkles className="w-4 h-4 text-cyan-200" />
+                    Edit Executive Portfolio
+                  </Link>
+                ) : (
+                  <Link
+                    href="/pricing"
+                    className={`w-full py-2.5 px-4 rounded-xl border text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm ${
+                      isLight
+                        ? "border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700"
+                        : "border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400"
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Unlock Portfolio Website
+                  </Link>
+                )}
+
                 {username && (
                   <a
                     href={`/api/v1/profile/${username}/vcard`}
